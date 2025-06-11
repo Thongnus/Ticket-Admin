@@ -86,11 +86,31 @@ export interface FetchUsersParams {
   sortDirection?: "asc" | "desc"
 }
 
-export interface ApiError {
+export interface ApiErrorData {
   message: string
   status?: number
   code?: string
   details?: any
+}
+
+// Custom error class for API errors
+export class ApiError extends Error {
+  status?: number
+  code?: string
+  details?: any
+
+  constructor({
+    message,
+    status,
+    code,
+    details,
+  }: ApiErrorData) {
+    super(message)
+    this.name = "ApiError"
+    this.status = status
+    this.code = code
+    this.details = details
+  }
 }
 
 // Utility function to convert array date to Date object
@@ -112,66 +132,6 @@ export function formatDateTime(dateArray: number[] | null): string {
   const date = arrayToDate(dateArray)
   if (!date) return "Chưa cập nhật"
   return date.toLocaleString("vi-VN")
-}
-
-// Enhanced fetch function with timeout and error handling
-const fetchWithTimeout = async (url: string, options: RequestInit = {}, timeout = 15000): Promise<Response> => {
-  const controller = new AbortController()
-  const timeoutId = setTimeout(() => controller.abort(), timeout)
-
-  try {
-    const response = await fetch(url, {
-      ...options,
-      signal: controller.signal,
-      headers: {
-        "Content-Type": "application/json",
-        Accept: "application/json",
-        ...options.headers,
-      },
-    })
-    clearTimeout(timeoutId)
-    return response
-  } catch (error) {
-    clearTimeout(timeoutId)
-    if (error.name === "AbortError") {
-      throw new ApiError({
-        message: "Request timeout - API server may be unavailable",
-        code: "TIMEOUT_ERROR",
-      })
-    }
-    if (error.name === "TypeError" && error.message.includes("fetch")) {
-      throw new ApiError({
-        message: "Network error - Cannot connect to API server",
-        code: "NETWORK_ERROR",
-      })
-    }
-    throw error
-  }
-}
-
-// Custom error class for API errors
-class ApiError extends Error {
-  status?: number
-  code?: string
-  details?: any
-
-  constructor({
-    message,
-    status,
-    code,
-    details,
-  }: {
-    message: string
-    status?: number
-    code?: string
-    details?: any
-  }) {
-    super(message)
-    this.name = "ApiError"
-    this.status = status
-    this.code = code
-    this.details = details
-  }
 }
 
 // Utility function to build query parameters
@@ -277,12 +237,12 @@ export const fetchUsers = async (params: FetchUsersParams = {}): Promise<ApiResp
 
     // Build query parameters
     const queryParams = buildQueryParams(defaultParams)
-    const url = `${API_BASE_URL}/users?${queryParams.toString()}`
+    const url = `/users?${queryParams.toString()}`
 
     console.log(`[API] Fetching users from: ${url}`)
 
-    // Make API request
-    const response = await fetchWithTimeout(url, {
+    // Make API request using authApi.fetchWithAuth
+    const response = await authApi.fetchWithAuth(url, {
       method: "GET",
       headers: {
         "Cache-Control": "no-cache",
@@ -326,7 +286,7 @@ export const fetchUsers = async (params: FetchUsersParams = {}): Promise<ApiResp
     const parsedUsers = data.content.map((user: any, index: number) => {
       try {
         return parseUserData(user)
-      } catch (error) {
+      } catch (error: any) {
         console.error(`[API] Error parsing user at index ${index}:`, error)
         throw new ApiError({
           message: `Invalid user data at index ${index}`,
@@ -343,7 +303,7 @@ export const fetchUsers = async (params: FetchUsersParams = {}): Promise<ApiResp
 
     console.log(`[API] Successfully fetched ${result.content.length} users (${result.totalElements} total)`)
     return result
-  } catch (error) {
+  } catch (error: any) {
     console.error("[API] Error fetching users:", error)
 
     // Re-throw ApiError instances
@@ -399,123 +359,339 @@ export const userApi = {
   // Create user
   createUser: async (userData: CreateUserRequest): Promise<UserDto> => {
     try {
-      const response = await fetchWithTimeout(`${API_BASE_URL}/users`, {
+      const response = await authApi.fetchWithAuth("/users", {
         method: "POST",
         body: JSON.stringify(userData),
-      })
+      });
 
       if (!response.ok) {
-        const errorData = await response.json().catch(() => null)
+        const errorData = await response.json().catch(() => null);
         throw new ApiError({
           message: errorData?.message || `HTTP ${response.status}: ${response.statusText}`,
           status: response.status,
           code: `HTTP_${response.status}`,
           details: errorData,
-        })
+        });
       }
 
-      const data = await response.json()
-      return parseUserData(data)
-    } catch (error) {
-      console.error("Create user error:", error)
+      const data = await response.json();
+      return parseUserData(data);
+    } catch (error: any) {
+      console.error("Create user error:", error);
       if (error instanceof ApiError) {
-        throw error
+        throw error;
       }
       throw new ApiError({
         message: error.message || "Failed to create user",
         code: "CREATE_USER_ERROR",
-      })
+      });
     }
   },
 
   // Update user
   updateUser: async (userId: number, userData: UpdateUserRequest): Promise<UserDto> => {
     try {
-      const response = await fetchWithTimeout(`${API_BASE_URL}/users/${userId}`, {
+      const response = await authApi.fetchWithAuth(`/users/${userId}`, {
         method: "PUT",
         body: JSON.stringify(userData),
-      })
+      });
 
       if (!response.ok) {
-        const errorData = await response.json().catch(() => null)
+        const errorData = await response.json().catch(() => null);
         throw new ApiError({
           message: errorData?.message || `HTTP ${response.status}: ${response.statusText}`,
           status: response.status,
           code: `HTTP_${response.status}`,
           details: errorData,
-        })
+        });
       }
 
-      const data = await response.json()
-      return parseUserData(data)
-    } catch (error) {
-      console.error("Update user error:", error)
+      const data = await response.json();
+      return parseUserData(data);
+    } catch (error: any) {
+      console.error("Update user error:", error);
       if (error instanceof ApiError) {
-        throw error
+        throw error;
       }
       throw new ApiError({
         message: error.message || "Failed to update user",
         code: "UPDATE_USER_ERROR",
-      })
+      });
     }
   },
 
   // Delete user
   deleteUser: async (userId: number): Promise<void> => {
     try {
-      const response = await fetchWithTimeout(`${API_BASE_URL}/users/${userId}`, {
+      const response = await authApi.fetchWithAuth(`/users/${userId}`, {
         method: "DELETE",
-      })
+      });
 
       if (!response.ok) {
-        const errorData = await response.json().catch(() => null)
+        const errorData = await response.json().catch(() => null);
         throw new ApiError({
           message: errorData?.message || `HTTP ${response.status}: ${response.statusText}`,
           status: response.status,
           code: `HTTP_${response.status}`,
           details: errorData,
-        })
+        });
       }
-    } catch (error) {
-      console.error("Delete user error:", error)
+    } catch (error: any) {
+      console.error("Delete user error:", error);
       if (error instanceof ApiError) {
-        throw error
+        throw error;
       }
       throw new ApiError({
         message: error.message || "Failed to delete user",
         code: "DELETE_USER_ERROR",
-      })
+      });
     }
   },
 
   // Toggle user status
   toggleUserStatus: async (userId: number): Promise<UserDto> => {
     try {
-      const response = await fetchWithTimeout(`${API_BASE_URL}/users/${userId}/toggle-status`, {
+      const response = await authApi.fetchWithAuth(`/users/${userId}/toggle-status`, {
         method: "PATCH",
-      })
+      });
 
       if (!response.ok) {
-        const errorData = await response.json().catch(() => null)
+        const errorData = await response.json().catch(() => null);
         throw new ApiError({
           message: errorData?.message || `HTTP ${response.status}: ${response.statusText}`,
           status: response.status,
           code: `HTTP_${response.status}`,
           details: errorData,
-        })
+        });
       }
 
-      const data = await response.json()
-      return parseUserData(data)
-    } catch (error) {
-      console.error("Toggle user status error:", error)
+      const data = await response.json();
+      return parseUserData(data);
+    } catch (error: any) {
+      console.error("Toggle user status error:", error);
       if (error instanceof ApiError) {
-        throw error
+        throw error;
       }
       throw new ApiError({
         message: error.message || "Failed to toggle user status",
         code: "TOGGLE_STATUS_ERROR",
+      });
+    }
+  },
+};
+
+// Authentication API functions
+export const authApi = {
+  refreshToken: async () => {
+    const refreshToken = localStorage.getItem("refreshToken")
+    if (!refreshToken) {
+      throw new Error("No refresh token found")
+    }
+
+    try {
+      const response = await fetch(`${API_BASE_URL}/auth/refresh`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Refresh-Token": refreshToken,
+        },
+      })
+
+      if (!response.ok) {
+        throw new Error("Failed to refresh token")
+      }
+
+      const data = await response.json()
+      localStorage.setItem("token", data.token)
+      return data.token
+    } catch (error: any) {
+      console.error("Error refreshing token:", error)
+      // Clear local storage and redirect to login
+      localStorage.removeItem("token")
+      localStorage.removeItem("refreshToken")
+      localStorage.removeItem("user")
+      throw error
+    }
+  },
+
+  fetchWithAuth: async (url: string, options: RequestInit = {}) => {
+    const token = localStorage.getItem("token")
+    if (!token) {
+      throw new Error("NO_TOKEN")
+    }
+
+    const headers = {
+      ...options.headers,
+      Authorization: `Bearer ${token}`,
+    }
+
+    try {
+      console.log("Fetching with auth:", `${API_BASE_URL}${url}`)
+      const response = await fetch(`${API_BASE_URL}${url}`, {
+        ...options,
+        headers,
+      })
+
+      if (response.status === 401) {
+        // Token expired, try to refresh
+        const newToken = await authApi.refreshToken()
+        headers.Authorization = `Bearer ${newToken}`
+        
+        // Retry the request with new token
+        return fetch(`${API_BASE_URL}${url}`, {
+          ...options,
+          headers,
+        })
+      }
+
+      return response
+    } catch (error: any) {
+      console.error("Error in fetchWithAuth:", error)
+      throw error
+    }
+  },
+
+  logout: async (router: any) => {
+    try {
+      const response = await authApi.fetchWithAuth("/auth/logout", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Refresh-Token": localStorage.getItem("refreshToken") || "",
+        },
+      })
+
+      if (!response.ok) {
+        throw new Error("Logout failed")
+      }
+    } catch (error: any) {
+      console.error("Logout error:", error)
+    } finally {
+      // Always clear local storage and redirect to login
+      localStorage.removeItem("token")
+      localStorage.removeItem("refreshToken")
+      localStorage.removeItem("user")
+      router.push("/login")
+    }
+  }
+}
+
+// Train API functions
+export const trainApi = {
+  getTrains: async () => {
+    try {
+      const response = await authApi.fetchWithAuth("/trains")
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}))
+        throw new ApiError({
+          message: errorData.message || `HTTP ${response.status}: ${response.statusText}`,
+          status: response.status,
+          code: `HTTP_${response.status}`,
+          details: errorData,
+        })
+      }
+      const data = await response.json()
+      return data.map((train: any) => ({
+        id: train.trainId,
+        trainNumber: train.trainNumber || "",
+        trainName: train.trainName || "",
+        trainType: train.trainType || "express",
+        capacity: train.capacity || 0,
+        status: train.status || "active",
+        createdAt: train.createdAt ? arrayToDate(train.createdAt) : new Date(),
+        updatedAt: train.updatedAt ? arrayToDate(train.updatedAt) : undefined,
+      }))
+    } catch (error: any) {
+      console.error("Get trains error:", error)
+      if (error instanceof ApiError) {
+        throw error
+      }
+      throw new ApiError({
+        message: error.message || "Failed to get trains",
+        code: "GET_TRAINS_ERROR",
       })
     }
   },
+}
+
+// Route API functions
+export const routeApi = {
+  getRoutes: async () => {
+    try {
+      const response = await authApi.fetchWithAuth("/routes")
+      if (!response.ok) {
+        throw new ApiError({
+          message: `Failed to get routes: ${response.status}`,
+          status: response.status,
+          code: `HTTP_${response.status}`,
+        })
+      }
+      const routesData = await response.json()
+      return routesData.map((route: any) => ({
+        id: route.routeId,
+        routeName: route.routeName,
+        routeCode: route.routeCode || generateRouteCode(route.routeName),
+        description: route.description || "",
+        totalDistance: route.distance,
+        estimatedDuration: route.estimatedDuration || "N/A",
+        status: route.status,
+        stops: route.stops || [],
+        createdAt: arrayToDate(route.createdAt),
+      }))
+    } catch (error: any) {
+      console.error("Get routes error:", error)
+      if (error instanceof ApiError) {
+        throw error
+      }
+      throw new ApiError({
+        message: error.message || "Failed to get routes",
+        code: "GET_ROUTES_ERROR",
+      })
+    }
+  },
+}
+
+// Booking API functions
+export const bookingApi = {
+  getBookings: async () => {
+    try {
+      const response = await authApi.fetchWithAuth("/bookings")
+      if (!response.ok) {
+        const errorData = await response.json()
+        throw new ApiError({
+          message: errorData.message || "Failed to get bookings",
+          status: response.status,
+          code: `HTTP_${response.status}`,
+          details: errorData,
+        })
+      }
+      const data = await response.json()
+      if (!Array.isArray(data.content)) {
+        throw new ApiError({
+          message: "Invalid response format: content is not an array",
+          code: "INVALID_RESPONSE_FORMAT",
+        })
+      }
+      return data.content
+    } catch (error: any) {
+      console.error("Get bookings error:", error)
+      if (error instanceof ApiError) {
+        throw error
+      }
+      throw new ApiError({
+        message: error.message || "Failed to get bookings",
+        code: "GET_BOOKINGS_ERROR",
+      })
+    }
+  },
+}
+
+// Helper function to generate route code
+function generateRouteCode(routeName: string): string {
+  return routeName
+    .split(" ")
+    .map(word => word[0])
+    .join("")
+    .toUpperCase()
+    .slice(0, 6)
 }

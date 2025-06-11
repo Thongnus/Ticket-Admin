@@ -5,8 +5,11 @@ import { useRouter } from "next/navigation"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { BarChart3, Users, Train, Ticket, AlertTriangle, CheckCircle, Clock, DollarSign, MapPin } from "lucide-react"
+import { BarChart3, Users, Train, Ticket, AlertTriangle, CheckCircle, Clock, DollarSign, MapPin, Activity, AlertCircle, Settings, User } from "lucide-react"
 import Link from "next/link"
+import { useWebSocket } from "@/hooks/useWebSocket"
+import { formatDistanceToNow } from "date-fns"
+import { vi } from "date-fns/locale"
 
 const baseUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080/api"
 
@@ -92,6 +95,7 @@ export default function AdminPage() {
     revenueGrowthPercentage: 0,
     ticketGrowthPercentage: 0,
   })
+  const { logs, isConnected, lastError } = useWebSocket()
 
   useEffect(() => {
     const fetchStats = async () => {
@@ -172,62 +176,48 @@ export default function AdminPage() {
     },
   ]
 
-  const recentActivities = [
-    {
-      id: 1,
-      type: "booking",
-      message: "Đơn đặt vé BK20250530001 đã được xác nhận",
-      time: "5 phút trước",
-      status: "success",
-    },
-    {
-      id: 2,
-      type: "delay",
-      message: "Chuyến SE9-20250530 bị trễ 15 phút",
-      time: "10 phút trước",
-      status: "warning",
-    },
-    {
-      id: 3,
-      type: "user",
-      message: "Người dùng mới đăng ký: nguyenvana@email.com",
-      time: "15 phút trước",
-      status: "info",
-    },
-    {
-      id: 4,
-      type: "payment",
-      message: "Thanh toán 800.000đ đã được xử lý",
-      time: "20 phút trước",
-      status: "success",
-    },
-  ]
-
   const getActivityIcon = (type: string) => {
     switch (type) {
-      case "booking":
+      case "CREATE":
+        return <Activity className="h-4 w-4" />
+      case "UPDATE":
+        return <Settings className="h-4 w-4" />
+      case "DELETE":
+        return <AlertCircle className="h-4 w-4" />
+      case "LOGIN":
+        return <User className="h-4 w-4" />
+      case "BOOKING":
         return <Ticket className="h-4 w-4" />
-      case "delay":
-        return <AlertTriangle className="h-4 w-4" />
-      case "user":
-        return <Users className="h-4 w-4" />
-      case "payment":
-        return <DollarSign className="h-4 w-4" />
+      case "TRAIN":
+        return <Train className="h-4 w-4" />
       default:
-        return <CheckCircle className="h-4 w-4" />
+        return <Activity className="h-4 w-4" />
     }
   }
 
-  const getActivityColor = (status: string) => {
-    switch (status) {
-      case "success":
-        return "text-green-600"
-      case "warning":
-        return "text-yellow-600"
-      case "info":
-        return "text-blue-600"
+  const getActivityColor = (action: string) => {
+    switch (action) {
+      case "CREATE":
+        return "text-green-500"
+      case "UPDATE":
+        return "text-blue-500"
+      case "DELETE":
+        return "text-red-500"
+      case "LOGIN":
+        return "text-purple-500"
       default:
-        return "text-gray-600"
+        return "text-gray-500"
+    }
+  }
+
+  const formatTime = (timestamp: string) => {
+    try {
+      return formatDistanceToNow(new Date(timestamp), {
+        addSuffix: true,
+        locale: vi,
+      })
+    } catch (error) {
+      return "Vừa xong"
     }
   }
 
@@ -335,20 +325,48 @@ export default function AdminPage() {
         <Card>
           <CardHeader>
             <CardTitle>Hoạt động gần đây</CardTitle>
-            <CardDescription>Các sự kiện mới nhất trong hệ thống</CardDescription>
+            <CardDescription>
+              {isConnected ? (
+                <span className="flex items-center text-green-500">
+                  <CheckCircle className="mr-2 h-4 w-4" />
+                  Đang kết nối
+                </span>
+              ) : (
+                <span className="flex items-center text-yellow-500">
+                  <Clock className="mr-2 h-4 w-4" />
+                  Đang kết nối lại...
+                </span>
+              )}
+            </CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="space-y-4">
-              {recentActivities.map((activity) => (
-                <div key={activity.id} className="flex items-start space-x-3">
-                  <div className={`mt-1 ${getActivityColor(activity.status)}`}>{getActivityIcon(activity.type)}</div>
-                  <div className="flex-1 space-y-1">
-                    <p className="text-sm">{activity.message}</p>
-                    <p className="text-xs text-muted-foreground">{activity.time}</p>
+            {lastError ? (
+              <div className="text-red-500">{lastError}</div>
+            ) : (
+              <div className="space-y-4">
+                {logs.length === 0 ? (
+                  <div className="text-center text-muted-foreground py-4">
+                    Chưa có hoạt động nào
                   </div>
-                </div>
-              ))}
-            </div>
+                ) : (
+                  logs.map((log) => (
+                    <div key={log.id} className="flex items-start space-x-3">
+                      <div className={`mt-1 ${getActivityColor(log.action)}`}>
+                        {getActivityIcon(log.entityType)}
+                      </div>
+                      <div className="flex-1 space-y-1">
+                        <p className="text-sm">
+                          {log.user?.username || "Hệ thống"} - {log.description}
+                        </p>
+                        <p className="text-xs text-muted-foreground">
+                          {formatTime(log.logTime)}
+                        </p>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            )}
           </CardContent>
         </Card>
       </div>

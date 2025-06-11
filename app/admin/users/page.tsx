@@ -374,7 +374,7 @@ export default function UsersManagement() {
                         const pageNumber = Math.max(0, Math.min(currentPage - 2 + i, totalPages - 1))
                         return (
                           <Button
-                            key={pageNumber}
+                            key={`page-${pageNumber}-${i}`}
                             variant={currentPage === pageNumber ? "default" : "outline"}
                             size="sm"
                             onClick={() => handlePageChange(pageNumber)}
