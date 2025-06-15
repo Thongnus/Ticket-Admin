@@ -9,6 +9,7 @@ import { Calendar } from "@/components/ui/calendar"
 import { Separator } from "@/components/ui/separator"
 import { BarChart as LucideBarChart, PieChart, DollarSign, Ticket, AlertTriangle, Train } from "lucide-react"
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, AreaChart, Area } from "recharts"
+import { dashboardApi } from "@/lib/api/dashboard"
 
 const baseUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080/api"
 
@@ -114,27 +115,69 @@ export default function AdminDashboard() {
   const router = useRouter()
   const [date, setDate] = useState<Date | undefined>(new Date())
   const [data, setData] = useState(mockData)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
     const fetchData = async () => {
       try {
-        // In a real application, you would fetch this data from the API
-        // const response = await fetchWithAuth("/admin/dashboard/data")
-        // const data = await response.json()
-        // setData(data)
-        
-        // For now, we'll use mock data
-        setData(mockData)
+        setLoading(true)
+        const [
+          overview,
+          dailyRevenue,
+          popularRoutes,
+          ticketDistribution,
+          revenueAnalysis
+        ] = await Promise.all([
+          dashboardApi.getOverview(),
+          dashboardApi.getDailyRevenue(),
+          dashboardApi.getPopularRoutes(),
+          dashboardApi.getTicketDistribution(),
+          dashboardApi.getRevenueAnalysis()
+        ])
+
+        setData({
+          ...mockData,
+          overview,
+          dailyRevenue,
+          popularRoutes,
+          ticketDistribution,
+          revenueAnalysis
+        })
       } catch (error) {
         console.error('Error fetching dashboard data:', error)
-        if (error instanceof Error && error.message === "NO_TOKEN") {
-          router.push("/login")
+        if (error instanceof Error) {
+          if (error.message === "NO_TOKEN") {
+            router.push("/login")
+            return
+          }
+          setError(error.message)
+        } else {
+          setError('Failed to load dashboard data')
         }
+      } finally {
+        setLoading(false)
       }
     }
 
     fetchData()
   }, [router])
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900"></div>
+      </div>
+    )
+  }
+
+  if (error) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="text-red-500">Error: {error}</div>
+      </div>
+    )
+  }
 
   const formatPrice = (price: number) => {
     return new Intl.NumberFormat("vi-VN").format(price)
