@@ -70,20 +70,20 @@ const mockData = {
     {
       id: 1,
       title: "Báo cáo doanh thu tháng 5/2025",
-      createdAt: "2025-06-01",
-      downloadUrl: "/reports/may-2025.pdf"
+      createdAt: "2025-05-31",
+      downloadUrl: "/reports/may-2025.xlsx"
     },
     {
       id: 2,
       title: "Báo cáo doanh thu tháng 4/2025",
-      createdAt: "2025-05-01",
-      downloadUrl: "/reports/april-2025.pdf"
+      createdAt: "2025-04-30",
+      downloadUrl: "/reports/april-2025.xlsx"
     },
     {
       id: 3,
       title: "Báo cáo doanh thu tháng 3/2025",
-      createdAt: "2025-04-01",
-      downloadUrl: "/reports/march-2025.pdf"
+      createdAt: "2025-03-31",
+      downloadUrl: "/reports/march-2025.xlsx"
     }
   ],
   notifications: [
@@ -117,6 +117,7 @@ export default function AdminDashboard() {
   const [data, setData] = useState(mockData)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [downloading, setDownloading] = useState(false)
 
   useEffect(() => {
     const fetchData = async () => {
@@ -163,6 +164,30 @@ export default function AdminDashboard() {
     fetchData()
   }, [router])
 
+  const handleDownloadReport = async () => {
+    try {
+      setDownloading(true)
+      const currentDate = new Date()
+      const month = currentDate.getMonth() + 1 // JavaScript months are 0-based
+      const year = currentDate.getFullYear()
+      
+      await dashboardApi.downloadReport(month, year)
+    } catch (error) {
+      console.error('Error downloading report:', error)
+      if (error instanceof Error) {
+        if (error.message === "NO_TOKEN") {
+          router.push("/login")
+          return
+        }
+        setError(error.message)
+      } else {
+        setError('Failed to download report')
+      }
+    } finally {
+      setDownloading(false)
+    }
+  }
+
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-screen">
@@ -198,7 +223,12 @@ export default function AdminDashboard() {
       <div className="flex items-center justify-between space-y-2">
         <h2 className="text-3xl font-bold tracking-tight">Bảng điều khiển</h2>
         <div className="flex items-center space-x-2">
-          <Button>Tải xuống báo cáo</Button>
+          <Button 
+            onClick={handleDownloadReport}
+            disabled={downloading}
+          >
+            {downloading ? "Đang tải..." : "Tải xuống báo cáo"}
+          </Button>
         </div>
       </div>
       <Tabs defaultValue="overview" className="space-y-4">
@@ -504,7 +534,39 @@ export default function AdminDashboard() {
                           Tạo ngày: {new Date(report.createdAt).toLocaleDateString("vi-VN")}
                         </p>
                       </div>
-                      <Button variant="outline">Tải xuống</Button>
+                      <Button 
+                        variant="outline" 
+                        onClick={async () => {
+                          try {
+                            setDownloading(true)
+                            // Extract month and year from report title (e.g., "Báo cáo doanh thu tháng 5/2025")
+                            const match = report.title.match(/tháng (\d+)\/(\d+)/)
+                            if (match) {
+                              const month = parseInt(match[1])
+                              const year = parseInt(match[2])
+                              await dashboardApi.downloadReport(month, year)
+                            } else {
+                              setError('Không thể xác định tháng và năm từ tiêu đề báo cáo')
+                            }
+                          } catch (error) {
+                            console.error('Error downloading report:', error)
+                            if (error instanceof Error) {
+                              if (error.message === "NO_TOKEN") {
+                                router.push("/login")
+                                return
+                              }
+                              setError(error.message)
+                            } else {
+                              setError('Failed to download report')
+                            }
+                          } finally {
+                            setDownloading(false)
+                          }
+                        }}
+                        disabled={downloading}
+                      >
+                        {downloading ? "Đang tải..." : "Tải xuống"}
+                      </Button>
                     </div>
                   </div>
                 ))}
