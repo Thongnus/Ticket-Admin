@@ -1,8 +1,7 @@
 "use client"
 
 import type React from "react"
-
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
@@ -20,190 +19,279 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
-import { Edit, MoreHorizontal, Plus, Search, Trash2, MapPin } from "lucide-react"
+import { Edit, MoreHorizontal, Plus, Search, Trash2, MapPin, ChevronLeft, ChevronRight } from "lucide-react"
 import { useToast } from "@/components/ui/use-toast"
 import { Textarea } from "@/components/ui/textarea"
-
-interface Station {
-  id: number
-  stationName: string
-  stationCode: string
-  city: string
-  province: string
-  address: string
-  latitude?: number
-  longitude?: number
-  status: string
-  createdAt: string
-}
+import { stationsApi, StationDto, PageResponse } from "@/lib/api/stations"
 
 export default function StationsManagement() {
   const { toast } = useToast()
-  const [stations, setStations] = useState<Station[]>([
-    {
-      id: 1,
-      stationName: "Ga Hà Nội",
-      stationCode: "HN",
-      city: "Hà Nội",
-      province: "Hà Nội",
-      address: "120 Lê Duẩn, Hoàn Kiếm, Hà Nội",
-      latitude: 21.0245,
-      longitude: 105.8412,
-      status: "active",
-      createdAt: "2025-05-13T11:19:49Z",
-    },
-    {
-      id: 2,
-      stationName: "Ga Phủ Lý",
-      stationCode: "PL",
-      city: "Phủ Lý",
-      province: "Hà Nam",
-      address: "Phủ Lý, Hà Nam",
-      status: "active",
-      createdAt: "2025-05-13T11:19:49Z",
-    },
-    {
-      id: 17,
-      stationName: "Ga Sài Gòn",
-      stationCode: "SG",
-      city: "TP.HCM",
-      province: "TP.HCM",
-      address: "1 Nguyễn Thông, Quận 3, TP.HCM",
-      latitude: 10.7821,
-      longitude: 106.6769,
-      status: "active",
-      createdAt: "2025-05-13T11:19:49Z",
-    },
-  ])
-
+  const [stations, setStations] = useState<StationDto[]>([])
   const [searchTerm, setSearchTerm] = useState("")
   const [statusFilter, setStatusFilter] = useState("all")
   const [isDialogOpen, setIsDialogOpen] = useState(false)
-  const [editingStation, setEditingStation] = useState<Station | null>(null)
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false)
+  const [stationToDelete, setStationToDelete] = useState<StationDto | null>(null)
+  const [editingStation, setEditingStation] = useState<StationDto | null>(null)
   const [formData, setFormData] = useState({
     stationName: "",
-    stationCode: "",
+    location: "",
+    address: "",
     city: "",
     province: "",
-    address: "",
-    latitude: "",
-    longitude: "",
+    phone: "",
     status: "active",
   })
+  const [loading, setLoading] = useState(true)
+  const [currentPage, setCurrentPage] = useState(0)
+  const [pageSize] = useState(10)
+  const [totalPages, setTotalPages] = useState(0)
+  const [totalElements, setTotalElements] = useState(0)
 
   const provinces = [
-    "Hà Nội",
-    "TP.HCM",
-    "Hà Nam",
-    "Nam Định",
-    "Ninh Bình",
-    "Thanh Hóa",
-    "Nghệ An",
-    "Quảng Bình",
-    "Quảng Trị",
-    "Thừa Thiên Huế",
+    "An Giang",
+    "Bà Rịa - Vũng Tàu",
+    "Bắc Giang",
+    "Bắc Kạn",
+    "Bạc Liêu",
+    "Bắc Ninh",
+    "Bến Tre",
+    "Bình Định",
+    "Bình Dương",
+    "Bình Phước",
+    "Bình Thuận",
+    "Cà Mau",
+    "Cần Thơ",
+    "Cao Bằng",
     "Đà Nẵng",
+    "Đắk Lắk",
+    "Đắk Nông",
+    "Điện Biên",
+    "Đồng Nai",
+    "Đồng Tháp",
+    "Gia Lai",
+    "Hà Giang",
+    "Hà Nam",
+    "Hà Nội",
+    "Hà Tĩnh",
+    "Hải Dương",
+    "Hải Phòng",
+    "Hậu Giang",
+    "Hòa Bình",
+    "Hưng Yên",
+    "Khánh Hòa",
+    "Kiên Giang",
+    "Kon Tum",
+    "Lai Châu",
+    "Lâm Đồng",
+    "Lạng Sơn",
+    "Lào Cai",
+    "Long An",
+    "Nam Định",
+    "Nghệ An",
+    "Ninh Bình",
+    "Ninh Thuận",
+    "Phú Thọ",
+    "Phú Yên",
+    "Quảng Bình",
     "Quảng Nam",
     "Quảng Ngãi",
-    "Phú Yên",
-    "Khánh Hòa",
-    "Ninh Thuận",
-    "Đồng Nai",
+    "Quảng Ninh",
+    "Quảng Trị",
+    "Sóc Trăng",
+    "Sơn La",
+    "Tây Ninh",
+    "Thái Bình",
+    "Thái Nguyên",
+    "Thanh Hóa",
+    "Thừa Thiên Huế",
+    "Tiền Giang",
+    "TP.HCM",
+    "Trà Vinh",
+    "Tuyên Quang",
+    "Vĩnh Long",
+    "Vĩnh Phúc",
+    "Yên Bái"
   ]
 
   const statusOptions = [
     { value: "active", label: "Hoạt động", color: "bg-green-100 text-green-800" },
-    { value: "inactive", label: "Tạm dừng", color: "bg-yellow-100 text-yellow-800" },
+    { value: "closed", label: "Tạm dừng", color: "bg-yellow-100 text-yellow-800" },
     { value: "maintenance", label: "Bảo trì", color: "bg-red-100 text-red-800" },
   ]
 
-  const filteredStations = stations.filter((station) => {
-    const matchesSearch =
-      station.stationName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      station.stationCode.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      station.city.toLowerCase().includes(searchTerm.toLowerCase())
+  useEffect(() => {
+    fetchStations()
+  }, [currentPage, statusFilter])
 
-    const matchesStatus = statusFilter === "all" || station.status === statusFilter
-
-    return matchesSearch && matchesStatus
-  })
-
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault()
-
-    if (editingStation) {
-      setStations(
-        stations.map((station) =>
-          station.id === editingStation.id
-            ? {
-                ...station,
-                ...formData,
-                latitude: formData.latitude ? Number.parseFloat(formData.latitude) : undefined,
-                longitude: formData.longitude ? Number.parseFloat(formData.longitude) : undefined,
-              }
-            : station,
-        ),
-      )
-      toast({
-        title: "Cập nhật thành công",
-        description: "Thông tin ga đã được cập nhật.",
-      })
-    } else {
-      const newStation: Station = {
-        id: Math.max(...stations.map((s) => s.id)) + 1,
-        ...formData,
-        latitude: formData.latitude ? Number.parseFloat(formData.latitude) : undefined,
-        longitude: formData.longitude ? Number.parseFloat(formData.longitude) : undefined,
-        createdAt: new Date().toISOString(),
+  const fetchStations = async () => {
+    try {
+      setLoading(true)
+      let response: PageResponse<StationDto>
+      if (statusFilter === "all") {
+        console.log("Fetching all stations with pagination:", { page: currentPage, size: pageSize })
+        response = await stationsApi.getPagedStations(currentPage, pageSize)
+        console.log("Response from /stations/paged:", response)
+      } else {
+        console.log("Fetching stations by status:", statusFilter)
+        const stations = await stationsApi.getStationsByStatus(statusFilter)
+        console.log("Response from /stations/status:", stations)
+        response = {
+          content: stations,
+          pageable: {
+            pageNumber: currentPage,
+            pageSize: pageSize,
+            sort: { sorted: true, unsorted: false, empty: false },
+            offset: currentPage * pageSize,
+            paged: true,
+            unpaged: false,
+          },
+          last: true,
+          totalElements: stations.length,
+          totalPages: Math.ceil(stations.length / pageSize),
+          first: currentPage === 0,
+          numberOfElements: stations.length,
+          size: pageSize,
+          number: currentPage,
+          sort: { sorted: true, unsorted: false, empty: false },
+          empty: stations.length === 0,
+        }
       }
-      setStations([...stations, newStation])
+      setStations(response.content)
+      setTotalPages(response.totalPages)
+      setTotalElements(response.totalElements)
+    } catch (error) {
+      console.error("Error fetching stations:", error)
       toast({
-        title: "Thêm thành công",
-        description: "Ga mới đã được thêm vào hệ thống.",
+        title: "Lỗi tải dữ liệu",
+        description: error instanceof Error ? error.message : "Không thể kết nối tới server.",
+        variant: "destructive",
       })
+    } finally {
+      setLoading(false)
     }
-
-    setIsDialogOpen(false)
-    setEditingStation(null)
-    setFormData({
-      stationName: "",
-      stationCode: "",
-      city: "",
-      province: "",
-      address: "",
-      latitude: "",
-      longitude: "",
-      status: "active",
-    })
   }
 
-  const handleEdit = (station: Station) => {
+  const handleSearch = async () => {
+    if (!searchTerm.trim()) {
+      fetchStations()
+      return
+    }
+
+    try {
+      setLoading(true)
+      const results = await stationsApi.searchStations(searchTerm)
+      setStations(results)
+      setTotalPages(Math.ceil(results.length / pageSize))
+      setTotalElements(results.length)
+    } catch (error) {
+      toast({
+        title: "Lỗi tìm kiếm",
+        description: error instanceof Error ? error.message : "Không thể tìm kiếm ga.",
+        variant: "destructive",
+      })
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+
+    try {
+      if (editingStation) {
+        const updatedStation = await stationsApi.updateStation(editingStation.stationId, formData)
+        setStations(stations.map((station) => (station.stationId === editingStation.stationId ? updatedStation : station)))
+        toast({
+          title: "Cập nhật thành công",
+          description: `Thông tin ga "${formData.stationName}" đã được cập nhật.`,
+          className: "bg-green-50 border-green-200 text-green-800",
+        })
+      } else {
+        const newStation = await stationsApi.createStation(formData)
+        setStations([...stations, newStation])
+        toast({
+          title: "Thêm thành công",
+          description: `Ga "${formData.stationName}" đã được thêm vào hệ thống.`,
+          className: "bg-green-50 border-green-200 text-green-800",
+        })
+      }
+
+      setIsDialogOpen(false)
+      setEditingStation(null)
+      setFormData({
+        stationName: "",
+        location: "",
+        address: "",
+        city: "",
+        province: "",
+        phone: "",
+        status: "active",
+      })
+    } catch (error) {
+      toast({
+        title: "Lỗi",
+        description: error instanceof Error ? error.message : "Không thể lưu thông tin ga.",
+        variant: "destructive",
+      })
+    }
+  }
+
+  const handleEdit = (station: StationDto) => {
     setEditingStation(station)
     setFormData({
       stationName: station.stationName,
-      stationCode: station.stationCode,
+      location: station.location,
+      address: station.address,
       city: station.city,
       province: station.province,
-      address: station.address,
-      latitude: station.latitude?.toString() || "",
-      longitude: station.longitude?.toString() || "",
+      phone: station.phone,
       status: station.status,
     })
     setIsDialogOpen(true)
   }
 
-  const handleDelete = (stationId: number) => {
-    setStations(stations.filter((station) => station.id !== stationId))
-    toast({
-      title: "Xóa thành công",
-      description: "Ga đã được xóa khỏi hệ thống.",
-    })
+  const handleDelete = (station: StationDto) => {
+    setStationToDelete(station)
+    setIsDeleteDialogOpen(true)
+  }
+
+  const confirmDelete = async () => {
+    if (!stationToDelete) return
+
+    try {
+      await stationsApi.deleteStation(stationToDelete.stationId)
+      setStations(stations.filter((station) => station.stationId !== stationToDelete.stationId))
+      toast({
+        title: "Xóa thành công",
+        description: `Ga "${stationToDelete.stationName}" đã được xóa khỏi hệ thống.`,
+        className: "bg-green-50 border-green-200 text-green-800",
+      })
+    } catch (error) {
+      toast({
+        title: "Lỗi",
+        description: error instanceof Error ? error.message : "Không thể xóa ga.",
+        variant: "destructive",
+      })
+    } finally {
+      setIsDeleteDialogOpen(false)
+      setStationToDelete(null)
+    }
   }
 
   const getStatusBadge = (status: string) => {
     const statusOption = statusOptions.find((option) => option.value === status)
     return <Badge className={statusOption?.color}>{statusOption?.label}</Badge>
   }
+
+  const filteredStations = stations.filter((station) => {
+    const matchesSearch =
+      station.stationName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      station.location.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      station.city.toLowerCase().includes(searchTerm.toLowerCase())
+
+    return matchesSearch
+  })
 
   return (
     <div className="flex flex-1 flex-col gap-4">
@@ -219,12 +307,11 @@ export default function StationsManagement() {
                 setEditingStation(null)
                 setFormData({
                   stationName: "",
-                  stationCode: "",
+                  location: "",
+                  address: "",
                   city: "",
                   province: "",
-                  address: "",
-                  latitude: "",
-                  longitude: "",
+                  phone: "",
                   status: "active",
                 })
               }}
@@ -253,11 +340,11 @@ export default function StationsManagement() {
                     />
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="stationCode">Mã ga</Label>
+                    <Label htmlFor="location">Vị trí</Label>
                     <Input
-                      id="stationCode"
-                      value={formData.stationCode}
-                      onChange={(e) => setFormData({ ...formData, stationCode: e.target.value })}
+                      id="location"
+                      value={formData.location}
+                      onChange={(e) => setFormData({ ...formData, location: e.target.value })}
                       required
                     />
                   </div>
@@ -300,29 +387,14 @@ export default function StationsManagement() {
                     rows={2}
                   />
                 </div>
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="latitude">Vĩ độ</Label>
-                    <Input
-                      id="latitude"
-                      type="number"
-                      step="any"
-                      value={formData.latitude}
-                      onChange={(e) => setFormData({ ...formData, latitude: e.target.value })}
-                      placeholder="21.0245"
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="longitude">Kinh độ</Label>
-                    <Input
-                      id="longitude"
-                      type="number"
-                      step="any"
-                      value={formData.longitude}
-                      onChange={(e) => setFormData({ ...formData, longitude: e.target.value })}
-                      placeholder="105.8412"
-                    />
-                  </div>
+                <div className="space-y-2">
+                  <Label htmlFor="phone">Số điện thoại</Label>
+                  <Input
+                    id="phone"
+                    value={formData.phone}
+                    onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+                    required
+                  />
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="status">Trạng thái</Label>
@@ -354,14 +426,15 @@ export default function StationsManagement() {
       <Card>
         <CardHeader>
           <CardTitle>Danh sách ga tàu</CardTitle>
-          <CardDescription>Tổng cộng {stations.length} ga trong hệ thống</CardDescription>
+          <CardDescription>Tổng cộng {totalElements} ga trong hệ thống</CardDescription>
           <div className="flex items-center space-x-4">
             <div className="flex items-center space-x-2">
               <Search className="h-4 w-4 text-muted-foreground" />
               <Input
-                placeholder="Tìm kiếm theo tên ga, mã ga..."
+                placeholder="Tìm kiếm theo tên ga, vị trí..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && handleSearch()}
                 className="max-w-sm"
               />
             </div>
@@ -381,63 +454,121 @@ export default function StationsManagement() {
           </div>
         </CardHeader>
         <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Mã ga</TableHead>
-                <TableHead>Tên ga</TableHead>
-                <TableHead>Địa điểm</TableHead>
-                <TableHead>Địa chỉ</TableHead>
-                <TableHead>Trạng thái</TableHead>
-                <TableHead>Ngày tạo</TableHead>
-                <TableHead className="text-right">Thao tác</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {filteredStations.map((station) => (
-                <TableRow key={station.id}>
-                  <TableCell className="font-medium">{station.stationCode}</TableCell>
-                  <TableCell>
-                    <div className="flex items-center">
-                      <MapPin className="mr-2 h-4 w-4 text-muted-foreground" />
-                      {station.stationName}
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    <div>
-                      <div className="font-medium">{station.city}</div>
-                      <div className="text-sm text-muted-foreground">{station.province}</div>
-                    </div>
-                  </TableCell>
-                  <TableCell className="max-w-xs truncate">{station.address}</TableCell>
-                  <TableCell>{getStatusBadge(station.status)}</TableCell>
-                  <TableCell>{new Date(station.createdAt).toLocaleDateString("vi-VN")}</TableCell>
-                  <TableCell className="text-right">
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button variant="ghost" className="h-8 w-8 p-0">
-                          <span className="sr-only">Mở menu</span>
-                          <MoreHorizontal className="h-4 w-4" />
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end">
-                        <DropdownMenuItem onClick={() => handleEdit(station)}>
-                          <Edit className="mr-2 h-4 w-4" />
-                          Chỉnh sửa
-                        </DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => handleDelete(station.id)} className="text-red-600">
-                          <Trash2 className="mr-2 h-4 w-4" />
-                          Xóa
-                        </DropdownMenuItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+          {loading ? (
+            <div className="flex items-center justify-center py-8">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-green-600"></div>
+            </div>
+          ) : filteredStations.length === 0 ? (
+            <div className="text-center py-8 text-muted-foreground">
+              Không tìm thấy ga nào.
+            </div>
+          ) : (
+            <>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Tên ga</TableHead>
+                    <TableHead>Địa điểm</TableHead>
+                    <TableHead>Địa chỉ</TableHead>
+                    <TableHead>Số điện thoại</TableHead>
+                    <TableHead>Trạng thái</TableHead>
+                    <TableHead>Ngày tạo</TableHead>
+                    <TableHead className="text-right">Thao tác</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {filteredStations.map((station) => (
+                    <TableRow key={station.stationId}>
+                      <TableCell>
+                        <div className="flex items-center">
+                          <MapPin className="mr-2 h-4 w-4 text-muted-foreground" />
+                          {station.stationName}
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        <div>
+                          <div className="font-medium">{station.city}</div>
+                          <div className="text-sm text-muted-foreground">{station.province}</div>
+                        </div>
+                      </TableCell>
+                      <TableCell className="max-w-xs truncate">{station.address}</TableCell>
+                      <TableCell>{station.phone}</TableCell>
+                      <TableCell>{getStatusBadge(station.status)}</TableCell>
+                      <TableCell>{new Date(station.createdAt).toLocaleDateString("vi-VN")}</TableCell>
+                      <TableCell className="text-right">
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button variant="ghost" className="h-8 w-8 p-0">
+                              <span className="sr-only">Mở menu</span>
+                              <MoreHorizontal className="h-4 w-4" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            <DropdownMenuItem onClick={() => handleEdit(station)}>
+                              <Edit className="mr-2 h-4 w-4" />
+                              Chỉnh sửa
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => handleDelete(station)} className="text-red-600">
+                              <Trash2 className="mr-2 h-4 w-4" />
+                              Xóa
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+              <div className="flex items-center justify-between mt-4">
+                <div className="text-sm text-muted-foreground">
+                  Hiển thị {stations.length} trên tổng số {totalElements} ga
+                </div>
+                <div className="flex items-center space-x-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setCurrentPage(currentPage - 1)}
+                    disabled={currentPage === 0}
+                  >
+                    <ChevronLeft className="h-4 w-4" />
+                  </Button>
+                  <div className="text-sm">
+                    Trang {currentPage + 1} / {totalPages}
+                  </div>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setCurrentPage(currentPage + 1)}
+                    disabled={currentPage === totalPages - 1}
+                  >
+                    <ChevronRight className="h-4 w-4" />
+                  </Button>
+                </div>
+              </div>
+            </>
+          )}
         </CardContent>
       </Card>
+
+      {/* Delete Confirmation Dialog */}
+      <Dialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
+        <DialogContent className="sm:max-w-[425px]">
+          <DialogHeader>
+            <DialogTitle className="text-red-600">Xác nhận xóa</DialogTitle>
+            <DialogDescription>
+              Bạn có chắc chắn muốn xóa ga "{stationToDelete?.stationName}"? Hành động này không thể hoàn tác.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex justify-end space-x-2">
+            <Button variant="outline" onClick={() => setIsDeleteDialogOpen(false)}>
+              Hủy
+            </Button>
+            <Button variant="destructive" onClick={confirmDelete}>
+              Xóa
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

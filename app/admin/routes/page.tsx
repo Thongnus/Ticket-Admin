@@ -21,6 +21,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { Edit, MoreHorizontal, Plus, Search, ArrowRight, X, Trash2 } from "lucide-react"
 import { useToast } from "@/components/ui/use-toast"
 import { Textarea } from "@/components/ui/textarea"
+import { authApi } from "@/lib/api"
 
 interface Station {
   id: number
@@ -55,23 +56,26 @@ export default function RoutesManagement() {
 
   // Static stations data
   const [stations] = useState<Station[]>([
-    { id: 1, name: "Ga Hà Nội", code: "HN", city: "Hà Nội" },
-    { id: 2, name: "Ga Phủ Lý", code: "PL", city: "Hà Nam" },
-    { id: 3, name: "Ga Nam Định", code: "ND", city: "Nam Định" },
-    { id: 4, name: "Ga Ninh Bình", code: "NB", city: "Ninh Bình" },
-    { id: 5, name: "Ga Thanh Hóa", code: "TH", city: "Thanh Hóa" },
-    { id: 6, name: "Ga Vinh", code: "VI", city: "Nghệ An" },
-    { id: 7, name: "Ga Đồng Hới", code: "DH", city: "Quảng Bình" },
-    { id: 8, name: "Ga Đông Hà", code: "DA", city: "Quảng Trị" },
-    { id: 9, name: "Ga Huế", code: "HU", city: "Thừa Thiên Huế" },
-    { id: 10, name: "Ga Đà Nẵng", code: "DN", city: "Đà Nẵng" },
-    { id: 11, name: "Ga Tam Kỳ", code: "TK", city: "Quảng Nam" },
-    { id: 12, name: "Ga Quảng Ngãi", code: "QN", city: "Quảng Ngãi" },
-    { id: 13, name: "Ga Diêu Trì", code: "DT", city: "Phú Yên" },
-    { id: 14, name: "Ga Nha Trang", code: "NT", city: "Khánh Hòa" },
-    { id: 15, name: "Ga Tháp Chàm", code: "TC", city: "Ninh Thuận" },
-    { id: 16, name: "Ga Biên Hòa", code: "BH", city: "Đồng Nai" },
-    { id: 17, name: "Ga Sài Gòn", code: "SG", city: "TP.HCM" },
+    { "id": 1, "name": "Ga Hà Nội", "code": "HN", "city": "Hà Nội" },
+    { "id": 2, "name": "Ga Phủ Lý", "code": "PL", "city": "Phủ Lý" },
+    { "id": 3, "name": "Ga Nam Định", "code": "ND", "city": "Nam Định" },
+    { "id": 4, "name": "Ga Ninh Bình", "code": "NB", "city": "Ninh Bình" },
+    { "id": 5, "name": "Ga Thanh Hóa", "code": "TH", "city": "Thanh Hóa" },
+    { "id": 6, "name": "Ga Vinh", "code": "VIN", "city": "Vinh" },
+    { "id": 7, "name": "Ga Đồng Hới", "code": "DH", "city": "Đồng Hới" },
+    { "id": 8, "name": "Ga Đông Hà", "code": "DHA", "city": "Đông Hà" },
+    { "id": 9, "name": "Ga Huế", "code": "HUE", "city": "Huế" },
+    { "id": 10, "name": "Ga Đà Nẵng", "code": "DN", "city": "Đà Nẵng" },
+    { "id": 11, "name": "Ga Tam Kỳ", "code": "TK", "city": "Tam Kỳ" },
+    { "id": 12, "name": "Ga Quảng Ngãi", "code": "QN", "city": "Quảng Ngãi" },
+    { "id": 13, "name": "Ga Diêu Trì", "code": "DT", "city": "Diêu Trì" },
+    { "id": 14, "name": "Ga Nha Trang", "code": "NT", "city": "Nha Trang" },
+    { "id": 15, "name": "Ga Tháp Chàm", "code": "TC", "city": "Tháp Chàm" },
+    { "id": 16, "name": "Ga Biên Hòa", "code": "BH", "city": "Biên Hòa" },
+    { "id": 17, "name": "Ga Sài Gòn", "code": "SGN", "city": "TP.HCM" },
+    { "id": 18, "name": "Ga Hải Phòng", "code": "HP", "city": "Hải Phòng" },
+    { "id": 19, "name": "Ga Lào Cai", "code": "LC", "city": "Lào Cai" },
+    { "id": 20, "name": "Ga Đà Lạt", "code": "DL", "city": "Đà Lạt" }
   ])
 
   const [routes, setRoutes] = useState<Route[]>([])
@@ -117,12 +121,7 @@ export default function RoutesManagement() {
     const fetchRoutes = async () => {
       try {
         setLoading(true)
-        const response = await fetch(`${baseUrl}/routes`, {
-          headers: { 
-            "Content-Type": "application/json",
-            "Authorization": `Bearer ${localStorage.getItem("token") || ""}`
-          },
-        })
+        const response = await authApi.fetchWithAuth("/routes")
         if (!response.ok) throw new Error(`Lỗi khi lấy danh sách tuyến đường: ${response.status}`)
         const routesData = await response.json()
 
@@ -154,7 +153,7 @@ export default function RoutesManagement() {
     }
 
     fetchRoutes()
-  }, [baseUrl, toast])
+  }, [toast])
 
   const statusOptions = [
     { value: "active", label: "Hoạt động", color: "bg-green-100 text-green-800" },
