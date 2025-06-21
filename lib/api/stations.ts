@@ -43,6 +43,15 @@ export interface PageResponse<T> {
 }
 
 export const stationsApi = {
+  // Lấy tất cả ga (không phân trang)
+  getAllStations: async (): Promise<StationDto[]> => {
+    const response = await authApi.fetchWithAuth("/stations")
+    if (!response.ok) {
+      throw new Error("Failed to fetch stations")
+    }
+    return response.json()
+  },
+
   // Lấy danh sách ga có phân trang
   getPagedStations: async (page: number, size: number): Promise<PageResponse<StationDto>> => {
     const response = await authApi.fetchWithAuth(`/stations/paged?page=${page}&size=${size}`)
