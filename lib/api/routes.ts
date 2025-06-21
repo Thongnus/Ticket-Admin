@@ -38,7 +38,15 @@ export const routesApi = {
         throw new Error(`Lỗi khi tạo tuyến đường (HTTP ${res.status})`);
       }
     }
-    return res.json();
+    
+    // Handle both JSON and plain text responses
+    const contentType = res.headers.get('content-type');
+    if (contentType && contentType.includes('application/json')) {
+      return res.json();
+    } else {
+      // For plain text responses (like success messages), return void
+      return;
+    }
   },
   async updateRoute(id: number, route: any) {
     const res = await authApi.fetchWithAuth(`/routes/${id}`, {
@@ -47,7 +55,52 @@ export const routesApi = {
       body: JSON.stringify(route),
     });
     if (!res.ok) throw new Error("Lỗi khi cập nhật tuyến đường");
-    return res.json();
+    
+    // Handle both JSON and plain text responses
+    const contentType = res.headers.get('content-type');
+    if (contentType && contentType.includes('application/json')) {
+      return res.json();
+    } else {
+      // For plain text responses (like success messages), return void
+      return;
+    }
+  },
+  async updateRouteWithStations(id: number, payload: any) {
+    const res = await authApi.fetchWithAuth(`/routes/${id}/with-stations`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    if (!res.ok) {
+      try {
+        const errorData = await res.json();
+        console.log("Backend error response:", errorData);
+        console.log("HTTP Status:", res.status);
+        console.log("Request payload:", payload);
+        
+        // Handle different error types
+        if (res.status === 500) {
+          throw new Error(`Lỗi server (500): ${errorData.message || errorData.error || 'Lỗi nội bộ server'}`);
+        }
+        
+        throw new Error(errorData.message || errorData.error || errorData.detail || `Lỗi khi cập nhật tuyến đường (HTTP ${res.status})`);
+      } catch (parseError) {
+        console.log("Failed to parse error response:", parseError);
+        if (res.status === 500) {
+          throw new Error(`Lỗi server (500): Không thể cập nhật tuyến đường. Vui lòng thử lại sau.`);
+        }
+        throw new Error(`Lỗi khi cập nhật tuyến đường (HTTP ${res.status})`);
+      }
+    }
+    
+    // Handle both JSON and plain text responses
+    const contentType = res.headers.get('content-type');
+    if (contentType && contentType.includes('application/json')) {
+      return res.json();
+    } else {
+      // For plain text responses (like success messages), return void
+      return;
+    }
   },
   async deleteRoute(id: number) {
     const res = await authApi.fetchWithAuth(`/routes/${id}`, { method: "DELETE" });
@@ -81,8 +134,15 @@ export const routesApi = {
         throw new Error(`Lỗi khi tạo tuyến đường kèm ga dừng (HTTP ${res.status})`);
       }
     }
-    // Backend returns 201 Created with no body, so we return void
-    return;
+    
+    // Handle both JSON and plain text responses
+    const contentType = res.headers.get('content-type');
+    if (contentType && contentType.includes('application/json')) {
+      return res.json();
+    } else {
+      // For plain text responses (like success messages), return void
+      return;
+    }
   },
   async getStationsByRoute(routeId: number) {
     const res = await authApi.fetchWithAuth(`/routes/${routeId}/stations`);

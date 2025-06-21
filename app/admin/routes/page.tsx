@@ -51,6 +51,10 @@ interface Route {
   totalDistance: number
   estimatedDuration: string
   status: string
+  originStationId: number
+  destinationStationId: number
+  originStationName?: string
+  destinationStationName?: string
   stops: RouteStop[]
   createdAt: string
 }
@@ -187,6 +191,10 @@ export default function RoutesManagement() {
               distanceFromStart: stop.distanceFromOrigin || 0,
             }))
             
+            // Find station names from stations array
+            const originStation = stations.find(s => s.id === route.originStationId)
+            const destinationStation = stations.find(s => s.id === route.destinationStationId)
+            
             return {
               id: route.routeId,
               routeName: route.routeName,
@@ -195,11 +203,20 @@ export default function RoutesManagement() {
               totalDistance: route.distance,
               estimatedDuration: "N/A",
               status: route.status,
+              originStationId: route.originStationId,
+              destinationStationId: route.destinationStationId,
+              originStationName: originStation?.name || route.originStationName,
+              destinationStationName: destinationStation?.name || route.destinationStationName,
               stops: transformedStops,
               createdAt: parseApiDate(route.createdAt),
             }
           } catch (error) {
             console.warn(`[Routes] Failed to fetch stops for route ${route.routeId}:`, error)
+            
+            // Find station names from stations array
+            const originStation = stations.find(s => s.id === route.originStationId)
+            const destinationStation = stations.find(s => s.id === route.destinationStationId)
+            
             // Return route without stops if API call fails
             return {
               id: route.routeId,
@@ -209,6 +226,10 @@ export default function RoutesManagement() {
               totalDistance: route.distance,
               estimatedDuration: "N/A",
               status: route.status,
+              originStationId: route.originStationId,
+              destinationStationId: route.destinationStationId,
+              originStationName: originStation?.name || route.originStationName,
+              destinationStationName: destinationStation?.name || route.destinationStationName,
               stops: [],
               createdAt: parseApiDate(route.createdAt),
             }
@@ -227,8 +248,11 @@ export default function RoutesManagement() {
   }
 
   useEffect(() => {
-    fetchStations()
-    fetchRoutes()
+    const loadData = async () => {
+      await fetchStations()
+      await fetchRoutes()
+    }
+    loadData()
   }, [])
 
   const statusOptions = [
@@ -352,7 +376,51 @@ export default function RoutesManagement() {
       status: formData.status,
     }
     
-    console.log("Route payload:", routePayload)
+    // Nếu đang edit, luôn gọi updateRouteWithStations (kể cả khi không còn stop nào)
+    if (editingRoute) {
+      for (const stop of routeStops) {
+        if (!stop.stationId) {
+          showCustomToast("❌ Lỗi ga dừng", "Vui lòng chọn đầy đủ ga dừng.", "error")
+          return
+        }
+      }
+      const stationsPayload: StationPayload[] = routeStops.map((stop, idx) => ({
+        stationId: Number(stop.stationId),
+        stopOrder: idx + 1,
+        arrivalOffset: Number(stop.arrivalOffset),
+        departureOffset: Number(stop.departureOffset),
+        distanceFromOrigin: Number(stop.distanceFromOrigin),
+      }))
+      try {
+        const requestPayload: RouteWithStationsRequest = {
+          route: routePayload,
+          stations: stationsPayload
+        }
+        console.log("Update request payload:", requestPayload)
+        await routesApi.updateRouteWithStations(editingRoute.id, requestPayload)
+        showCustomToast("✅ Cập nhật thành công", "Tuyến đường đã được cập nhật.", "success")
+        setIsDialogOpen(false)
+        setEditingRoute(null)
+        setFormData({
+          routeName: "",
+          originStationId: "",
+          destinationStationId: "",
+          distance: "",
+          description: "",
+          status: "active",
+        })
+        setRouteStops([])
+        setValidationErrors({})
+        setRouteStopsErrors({})
+        fetchRoutes()
+      } catch (error) {
+        console.log("Error in updateRouteWithStations:", error);
+        const errorMessage = parseErrorMessage(error);
+        console.log("Parsed error message:", errorMessage);
+        showCustomToast("❌ Lỗi cập nhật tuyến đường", errorMessage, "error");
+      }
+      return
+    }
     
     // Nếu không có ga dừng nào, chỉ tạo tuyến đường
     if (routeStops.length === 0) {
@@ -369,14 +437,13 @@ export default function RoutesManagement() {
           status: "active",
         })
         setRouteStops([])
-        setValidationErrors({}) // Clear validation errors
-        setRouteStopsErrors({}) // Clear route stops errors
+        setValidationErrors({})
+        setRouteStopsErrors({})
         fetchRoutes()
       } catch (error) {
         console.log("Error in createRoute:", error);
         const errorMessage = parseErrorMessage(error);
         console.log("Parsed error message:", errorMessage);
-        
         showCustomToast("❌ Lỗi tạo tuyến đường", errorMessage, "error");
       }
       return
@@ -389,7 +456,6 @@ export default function RoutesManagement() {
         return
       }
     }
-    
     const stationsPayload: StationPayload[] = routeStops.map((stop, idx) => ({
       stationId: Number(stop.stationId),
       stopOrder: idx + 1,
@@ -397,16 +463,12 @@ export default function RoutesManagement() {
       departureOffset: Number(stop.departureOffset),
       distanceFromOrigin: Number(stop.distanceFromOrigin),
     }))
-    
     try {
-      // Updated payload structure for RouteWithStationsRequest
       const requestPayload: RouteWithStationsRequest = {
         route: routePayload,
         stations: stationsPayload
       }
-      
-      console.log("Request payload with stations:", requestPayload)
-      
+      console.log("Create request payload:", requestPayload)
       await routesApi.createRouteWithStations(requestPayload)
       showCustomToast("✅ Thành công", "Tuyến đường mới đã được thêm vào hệ thống.", "success")
       setIsDialogOpen(false)
@@ -419,29 +481,36 @@ export default function RoutesManagement() {
         status: "active",
       })
       setRouteStops([])
-      setValidationErrors({}) // Clear validation errors
-      setRouteStopsErrors({}) // Clear route stops errors
+      setValidationErrors({})
+      setRouteStopsErrors({})
       fetchRoutes()
     } catch (error) {
       console.log("Error in createRouteWithStations:", error);
       const errorMessage = parseErrorMessage(error);
       console.log("Parsed error message:", errorMessage);
-      
       showCustomToast("❌ Lỗi tạo tuyến đường", errorMessage, "error");
     }
   }
 
   const handleEdit = (route: Route) => {
+    console.log("Editing route:", route);
+    console.log("Route stops:", route.stops);
     setEditingRoute(route)
+    
+    // Set form data using origin and destination from Route object
     setFormData({
       routeName: route.routeName,
-      originStationId: route.stops[0]?.stationId.toString() || "",
-      destinationStationId: route.stops[route.stops.length - 1]?.stationId.toString() || "",
+      originStationId: route.originStationId.toString(),
+      destinationStationId: route.destinationStationId.toString(),
       distance: route.totalDistance.toString(),
       description: route.description,
       status: route.status,
     })
+    
+    // Set all route stops for editing (including intermediate stops)
     setRouteStops([...route.stops])
+    console.log("Set route stops for editing:", route.stops);
+    
     setIsDialogOpen(true)
   }
 
@@ -911,21 +980,30 @@ export default function RoutesManagement() {
                         <div className="space-y-1">
                           <div className="flex items-center space-x-1">
                             <span className="text-sm font-medium">Tuyến:</span>
-                            <span className="text-sm">{route.stops[0]?.stationName}</span>
+                            <span className="text-sm">{route.originStationName || `Ga ${route.originStationId}`}</span>
                             <ArrowRight className="h-3 w-3 text-muted-foreground" />
-                            <span className="text-sm">{route.stops[route.stops.length - 1]?.stationName}</span>
+                            <span className="text-sm">{route.destinationStationName || `Ga ${route.destinationStationId}`}</span>
                           </div>
                           {route.stops.length > 2 && (
                             <div className="text-xs text-muted-foreground">
                               Ga dừng: {route.stops.slice(1, -1).map(stop => stop.stationName).join(" → ")}
                             </div>
                           )}
-                          <div className="text-xs text-muted-foreground">{route.stops.length} ga dừng</div>
+                          <div className="text-xs text-muted-foreground">
+                            {route.stops.length === 1 ? '1 ga (đi và đến)' : 
+                             route.stops.length > 2 ? `${route.stops.length - 2} ga dừng trung gian` : 
+                             'Không có ga dừng trung gian'}
+                          </div>
                         </div>
                       ) : (
                         <div className="space-y-1">
-                          <span className="text-sm text-muted-foreground">Chưa có ga dừng</span>
-                          <div className="text-xs text-muted-foreground">0 ga dừng</div>
+                          <div className="flex items-center space-x-1">
+                            <span className="text-sm font-medium">Tuyến:</span>
+                            <span className="text-sm">{route.originStationName || `Ga ${route.originStationId}`}</span>
+                            <ArrowRight className="h-3 w-3 text-muted-foreground" />
+                            <span className="text-sm">{route.destinationStationName || `Ga ${route.destinationStationId}`}</span>
+                          </div>
+                          <div className="text-xs text-muted-foreground">Không có ga dừng trung gian</div>
                         </div>
                       )}
                     </TableCell>
