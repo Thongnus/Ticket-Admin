@@ -20,18 +20,7 @@ import {
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { Edit, MoreHorizontal, Plus, Search, Trash2 } from "lucide-react"
 import { useToast } from "@/components/ui/use-toast"
-
-// Giao diện tàu
-interface Train {
-  id: number
-  trainNumber: string
-  trainName: string
-  trainType: string
-  capacity: number
-  status: string
-  createdAt: string
-  updatedAt?: string
-}
+import { getTrains, createTrain, updateTrain, deleteTrain, Train } from "@/lib/api/trains"
 
 export default function TrainsManagement() {
   const { toast } = useToast()
@@ -47,7 +36,6 @@ export default function TrainsManagement() {
     capacity: "",
     status: "active",
   })
-  const baseUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080/api"
 
   const trainTypes = [
     { value: "express", label: "Tàu tốc hành" },
@@ -62,72 +50,21 @@ export default function TrainsManagement() {
     { value: "retired", label: "Ngừng hoạt động", color: "bg-red-100 text-red-800" },
   ]
 
-  // Chuyển mảng ngày thành chuỗi ISO
-  const parseApiDate = (dateArray: number[]): string => {
-    try {
-      const [year, month, day, hour, minute, second] = dateArray
-      return new Date(year, month - 1, day, hour, minute, second).toISOString()
-    } catch {
-      console.warn("Invalid date array, using current date")
-      return new Date().toISOString()
-    }
-  }
-
   // Lấy danh sách tàu
   useEffect(() => {
-    const fetchTrains = async () => {
-      try {
-        setLoading(true)
-        console.log("Fetching from:", `${baseUrl}/trains`)
-        const res = await fetch(`${baseUrl}/trains`, {
-          headers: {
-            "Content-Type": "application/json",
-          },
-        })
-        if (!res.ok) {
-          const errorData = await res.json().catch(() => ({}))
-          throw new Error(
-            errorData.message ||
-              `Lỗi ${res.status}: ${
-                res.status === 404
-                  ? "API không tồn tại"
-                  : res.status === 401
-                  ? "Không có quyền truy cập"
-                  : res.status === 500
-                  ? "Lỗi server"
-                  : "Không thể kết nối"
-              }`,
-          )
-        }
-        const data = await res.json()
-        console.log("[Trains] Dữ liệu:", data)
-        const mappedTrains = data.map((train: any) => ({
-          id: train.trainId,
-          trainNumber: train.trainNumber || "",
-          trainName: train.trainName || "",
-          trainType: train.trainType || "express",
-          capacity: train.capacity || 0,
-          status: train.status || "active",
-          createdAt: train.createdAt ? parseApiDate(train.createdAt) : new Date().toISOString(),
-          updatedAt: train.updatedAt ? parseApiDate(train.updatedAt) : undefined,
-        }))
-        setTrains(mappedTrains)
-        console.log("[Trains] State:", mappedTrains)
-      } catch (error) {
-        console.error("[Trains] Lỗi:", error)
+    setLoading(true)
+    getTrains()
+      .then(setTrains)
+      .catch((error) => {
         setTrains([])
         toast({
           title: "Lỗi tải danh sách tàu",
           description: error instanceof Error ? error.message : "Không thể kết nối tới server.",
           variant: "destructive",
         })
-      } finally {
-        setLoading(false)
-      }
-    }
-
-    fetchTrains()
-  }, [baseUrl, toast])
+      })
+      .finally(() => setLoading(false))
+  }, [toast])
 
   // Lọc tàu
   const filteredTrains = trains.filter((train: Train) =>
@@ -135,12 +72,9 @@ export default function TrainsManagement() {
     train.trainName.toLowerCase().includes(searchTerm.toLowerCase()),
   )
 
-  console.log("[Trains] Filtered:", filteredTrains)
-
   // Xử lý form
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-
     try {
       const trainData = {
         trainNumber: formData.trainNumber,
@@ -149,49 +83,12 @@ export default function TrainsManagement() {
         capacity: Number.parseInt(formData.capacity),
         status: formData.status,
       }
-
       if (editingTrain) {
-        const res = await fetch(`${baseUrl}/trains/${editingTrain.id}`, {
-          method: "PUT",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify(trainData),
-        })
-        if (!res.ok) {
-          const errorData = await res.json().catch(() => ({}))
-          throw new Error(errorData.message || "Lỗi khi cập nhật tàu")
-        }
-        const updatedTrain = await res.json()
-        setTrains(
-          trains.map((train) =>
-            train.id === editingTrain.id
-              ? {
-                  ...train,
-                  ...trainData,
-                  createdAt: updatedTrain.createdAt ? parseApiDate(updatedTrain.createdAt) : train.createdAt,
-                  updatedAt: updatedTrain.updatedAt ? parseApiDate(updatedTrain.updatedAt) : train.updatedAt,
-                }
-              : train,
-          ),
-        )
-        toast({
-          title: "Cập nhật thành công",
-          description: "Thông tin tàu đã được cập nhật.",
-        })
+        const updated = await updateTrain(editingTrain.id, trainData)
+        setTrains(trains.map((train) => (train.id === editingTrain.id ? { ...train, ...trainData, updatedAt: updated.updatedAt } : train)))
+        toast({ title: "Cập nhật thành công", description: "Thông tin tàu đã được cập nhật." })
       } else {
-        const res = await fetch(`${baseUrl}/trains`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify(trainData),
-        })
-        if (!res.ok) {
-          const errorData = await res.json().catch(() => ({}))
-          throw new Error(errorData.message || "Lỗi khi thêm tàu")
-        }
-        const newTrain = await res.json()
+        const newTrain = await createTrain(trainData)
         setTrains([
           ...trains,
           {
@@ -201,25 +98,15 @@ export default function TrainsManagement() {
             trainType: newTrain.trainType,
             capacity: newTrain.capacity,
             status: newTrain.status,
-            createdAt: parseApiDate(newTrain.createdAt),
-            updatedAt: newTrain.updatedAt ? parseApiDate(newTrain.updatedAt) : undefined,
+            createdAt: newTrain.createdAt,
+            updatedAt: newTrain.updatedAt,
           },
         ])
-        toast({
-          title: "Thêm thành công",
-          description: "Tàu mới đã được thêm vào hệ thống.",
-        })
+        toast({ title: "Thêm thành công", description: "Tàu mới đã được thêm vào hệ thống." })
       }
-
       setIsDialogOpen(false)
       setEditingTrain(null)
-      setFormData({
-        trainNumber: "",
-        trainName: "",
-        trainType: "express",
-        capacity: "",
-        status: "active",
-      })
+      setFormData({ trainNumber: "", trainName: "", trainType: "express", capacity: "", status: "active" })
     } catch (error) {
       toast({
         title: "Lỗi",
@@ -245,21 +132,9 @@ export default function TrainsManagement() {
   // Xóa tàu
   const handleDelete = async (trainId: number) => {
     try {
-      const res = await fetch(`${baseUrl}/trains/${trainId}`, {
-        method: "DELETE",
-        headers: {
-          "Content-Type": "application/json",
-        },
-      })
-      if (!res.ok) {
-        const errorData = await res.json().catch(() => ({}))
-        throw new Error(errorData.message || "Lỗi khi xóa tàu")
-      }
+      await deleteTrain(trainId)
       setTrains(trains.filter((train) => train.id !== trainId))
-      toast({
-        title: "Xóa thành công",
-        description: "Tàu đã được xóa khỏi hệ thống.",
-      })
+      toast({ title: "Xóa thành công", description: "Tàu đã được xóa khỏi hệ thống." })
     } catch (error) {
       toast({
         title: "Lỗi",

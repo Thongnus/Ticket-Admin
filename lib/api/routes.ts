@@ -163,4 +163,20 @@ export const routesApi = {
     if (!res.ok) throw new Error("Lỗi khi xóa ga dừng của tuyến");
     return;
   },
-}; 
+};
+
+export interface Route {
+  routeId: number;
+  routeName: string;
+  originStationName: string;
+  destinationStationName: string;
+  status: string;
+}
+
+const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8080/api";
+
+export async function fetchActiveRoutes(): Promise<Route[]> {
+  const res = await fetch(`${API_BASE}/routes/active`);
+  if (!res.ok) throw new Error("Không thể tải danh sách tuyến đường");
+  return res.json();
+} 
