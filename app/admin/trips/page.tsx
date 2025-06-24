@@ -21,7 +21,7 @@ import {
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { Edit, MoreHorizontal, Plus, Search, Trash2, Clock, AlertTriangle, Loader2 } from "lucide-react"
 import { useToast } from "@/components/ui/use-toast"
-import { fetchTripsPaged, TripDto } from "@/lib/api/trips"
+import { fetchTripsPaged, TripDto, createTrip, updateTrip, deleteTrip, getTrip, updateTripStatus, markTripDelayed } from "@/lib/api/trips"
 import { fetchActiveTrains, Train } from "@/lib/api/trains"
 import { fetchActiveRoutes, Route } from "@/lib/api/routes"
 
@@ -61,45 +61,62 @@ export default function TripsManagement() {
   const [totalElements, setTotalElements] = useState(0)
   const [routes, setRoutes] = useState<Route[]>([])
   const [trains, setTrains] = useState<Train[]>([])
+  // Custom toast state
+  const [customToast, setCustomToast] = useState<{
+    show: boolean;
+    title: string;
+    message: string;
+    type: 'success' | 'error' | 'info';
+  }>({
+    show: false,
+    title: '',
+    message: '',
+    type: 'info',
+  });
 
-  // Lấy dữ liệu từ API
-  useEffect(() => {
-    let ignore = false
-    setLoading(true)
-    setError(null)
+  // Custom toast function
+  const showCustomToast = (title: string, message: string, type: 'success' | 'error' | 'info' = 'info') => {
+    setCustomToast({ show: true, title, message, type });
+    setTimeout(() => setCustomToast({ show: false, title: '', message: '', type: 'info' }), 4000);
+  };
+
+  // Hàm loadTrips dùng lại cho mọi thao tác
+  const loadTrips = () => {
+    setLoading(true);
+    setError(null);
     fetchTripsPaged({
       search: searchTerm,
       status: statusFilter,
       page,
       size,
-      sort: ["departureTime,asc"],
+      sort: ["departureTime,desc"],
     })
       .then((data) => {
-        if (ignore) return
         setTrips(
           data.content.map((t: TripDto) => ({
-            id: t.tripId,
+            id: t.tripId ?? 0,
             tripCode: t.tripCode,
             routeName: t.route.routeName,
             trainNumber: t.train.trainNumber,
             departureTime: convertDateTime(t.departureTime),
             arrivalTime: convertDateTime(t.arrivalTime),
             status: t.status,
-            delayMinutes: t.delayMinutes,
+            delayMinutes: t.delayMinutes ?? 0,
             createdAt: convertDateTime(t.createdAt),
           }))
-        )
-        setTotalPages(data.totalPages)
-        setTotalElements(data.totalElements)
+        );
+        setTotalPages(data.totalPages);
+        setTotalElements(data.totalElements);
       })
-      .catch((err) => {
-        setError("Không thể tải dữ liệu chuyến tàu.")
-      })
-      .finally(() => setLoading(false))
-    return () => {
-      ignore = true
-    }
-  }, [searchTerm, statusFilter, page, size])
+      .catch(() => setError("Không thể tải dữ liệu chuyến tàu."))
+      .finally(() => setLoading(false));
+  };
+
+  // Gọi loadTrips trong useEffect
+  useEffect(() => {
+    loadTrips();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchTerm, statusFilter, page, size]);
 
   // Lấy danh sách tuyến và tàu khi mở dialog
   useEffect(() => {
@@ -131,11 +148,105 @@ export default function TripsManagement() {
     { value: "completed", label: "Hoàn thành", color: "bg-green-100 text-green-800" },
   ]
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    // TODO: Gọi API thêm/sửa chuyến tàu
-    setIsDialogOpen(false)
-    setEditingTrip(null)
+    setLoading(true)
+    try {
+      // Find selected route and train objects
+      const selectedRoute = routes.find(r => r.routeName === formData.routeName)
+      const selectedTrain = trains.find(t => t.trainNumber === formData.trainNumber)
+      if (!selectedRoute || !selectedTrain) {
+        toast({ title: "Thiếu thông tin", description: "Vui lòng chọn tuyến đường và tàu." })
+        setLoading(false)
+        return
+      }
+      // Format date fields as 'HH:mm:ss dd/MM/yyyy '
+      function formatDateTime(dt: string) {
+        if (!dt) return "";
+        const d = new Date(dt);
+        const pad = (n: number) => n.toString().padStart(2, '0');
+        return `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())} ${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${d.getFullYear()} `;
+      }
+      // Map Route to RouteDto
+      const routeDto = selectedRoute && {
+        routeId: selectedRoute.routeId,
+        routeName: selectedRoute.routeName,
+        originStationId: 0, // or fetch if available
+        destinationStationId: 0, // or fetch if available
+        originStationName: selectedRoute.originStationName,
+        destinationStationName: selectedRoute.destinationStationName,
+        distance: 0, // or fetch if available
+        description: "", // or fetch if available
+        status: selectedRoute.status,
+        createdAt: "", // or fetch if available
+        updatedAt: "", // or fetch if available
+      }
+      // Map Train to TrainDto
+      const trainDto = selectedTrain && {
+        trainId: selectedTrain.id,
+        trainNumber: selectedTrain.trainNumber,
+        trainName: selectedTrain.trainName,
+        trainType: selectedTrain.trainType,
+        capacity: selectedTrain.capacity,
+        status: selectedTrain.status,
+        createdAt: selectedTrain.createdAt || "",
+        updatedAt: selectedTrain.updatedAt || "",
+      }
+      let tripDto: TripDto;
+      if (editingTrip) {
+        tripDto = {
+          tripId: editingTrip.id,
+          route: routeDto,
+          train: trainDto,
+          tripCode: formData.tripCode,
+          departureTime: formatDateTime(formData.departureTime),
+          arrivalTime: formatDateTime(formData.arrivalTime),
+          status: formData.status,
+          delayMinutes: Number(formData.delayMinutes) || 0,
+          createdAt: "",
+          updatedAt: "",
+        }
+      } else {
+        tripDto = {
+          route: routeDto,
+          train: trainDto,
+          tripCode: formData.tripCode,
+          departureTime: formatDateTime(formData.departureTime),
+          arrivalTime: formatDateTime(formData.arrivalTime),
+          status: formData.status,
+          createdAt: "",
+          updatedAt: "",
+        }
+      }
+      if (editingTrip) {
+        await updateTrip(editingTrip.id, tripDto);
+        showCustomToast("✅ Thành công", "Cập nhật chuyến tàu thành công.", "success");
+      } else {
+        await createTrip(tripDto);
+        showCustomToast("✅ Thành công", "Thêm chuyến tàu thành công.", "success");
+      }
+      setIsDialogOpen(false)
+      setEditingTrip(null)
+      setFormData({
+        tripCode: "",
+        routeName: "",
+        trainNumber: "",
+        departureTime: "",
+        arrivalTime: "",
+        status: "scheduled",
+        delayMinutes: "0",
+      })
+      loadTrips();
+    } catch (err: any) {
+      showCustomToast("❌ Lỗi", err.message || "Không thể lưu chuyến tàu.", "error");
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleEdit = async (trip: Trip) => {
+    setIsDialogOpen(true);
+    setEditingTrip(trip);
     setFormData({
       tripCode: "",
       routeName: "",
@@ -144,42 +255,62 @@ export default function TripsManagement() {
       arrivalTime: "",
       status: "scheduled",
       delayMinutes: "0",
-    })
-    toast({
-      title: "Chức năng đang phát triển",
-      description: "Chức năng thêm/sửa sẽ cập nhật sau.",
-    })
-  }
+    });
+    try {
+      const tripDetail = await getTrip(trip.id);
+      setFormData({
+        tripCode: tripDetail.tripCode,
+        routeName: tripDetail.route.routeName,
+        trainNumber: tripDetail.train.trainNumber,
+        departureTime: convertDateTime(tripDetail.departureTime).slice(0, 16),
+        arrivalTime: convertDateTime(tripDetail.arrivalTime).slice(0, 16),
+        status: tripDetail.status,
+        delayMinutes: (tripDetail.delayMinutes ?? 0).toString(),
+      });
+    } catch (err: any) {
+      toast({ title: "Lỗi", description: err.message || "Không thể lấy chi tiết chuyến tàu." });
+    }
+  };
 
-  const handleEdit = (trip: Trip) => {
-    setEditingTrip(trip)
-    setFormData({
-      tripCode: trip.tripCode,
-      routeName: trip.routeName,
-      trainNumber: trip.trainNumber,
-      departureTime: trip.departureTime.slice(0, 16),
-      arrivalTime: trip.arrivalTime.slice(0, 16),
-      status: trip.status,
-      delayMinutes: trip.delayMinutes.toString(),
-    })
-    setIsDialogOpen(true)
-  }
+  const handleDelete = async (tripId: number) => {
+    if (!window.confirm("Bạn có chắc chắn muốn xóa chuyến tàu này?")) return;
+    setLoading(true);
+    try {
+      await deleteTrip(tripId);
+      showCustomToast("✅ Thành công", "Đã xóa chuyến tàu.", "success");
+      loadTrips();
+    } catch (err: any) {
+      showCustomToast("❌ Lỗi", err.message || "Không thể xóa chuyến tàu.", "error");
+    } finally {
+      setLoading(false);
+    }
+  };
 
-  const handleDelete = (tripId: number) => {
-    // TODO: Gọi API xóa chuyến tàu
-    toast({
-      title: "Chức năng đang phát triển",
-      description: "Chức năng xóa sẽ cập nhật sau.",
-    })
-  }
+  const handleUpdateStatus = async (tripId: number, newStatus: string) => {
+    setLoading(true);
+    try {
+      await updateTripStatus(tripId, newStatus);
+      showCustomToast("✅ Thành công", "Đã cập nhật trạng thái chuyến tàu.", "success");
+      loadTrips();
+    } catch (err: any) {
+      showCustomToast("❌ Lỗi", err.message || "Không thể cập nhật trạng thái.", "error");
+    } finally {
+      setLoading(false);
+    }
+  };
 
-  const handleUpdateStatus = (tripId: number, newStatus: string) => {
-    // TODO: Gọi API cập nhật trạng thái
-    toast({
-      title: "Chức năng đang phát triển",
-      description: "Chức năng cập nhật trạng thái sẽ cập nhật sau.",
-    })
-  }
+  const handleMarkDelayed = async (tripId: number) => {
+    setLoading(true);
+    try {
+      await markTripDelayed(tripId);
+      showCustomToast("✅ Thành công", "Đã đánh dấu chuyến tàu bị trễ.", "success");
+      loadTrips();
+    } catch (err: any) {
+      showCustomToast("❌ Lỗi", err.message || "Không thể đánh dấu trễ.", "error");
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const getStatusBadge = (status: string) => {
     const statusOption = statusOptions.find((option) => option.value === status)
@@ -333,19 +464,21 @@ export default function TripsManagement() {
                     </SelectContent>
                   </Select>
                 </div>
-                <div className="grid grid-cols-4 items-center gap-4">
-                  <Label htmlFor="delayMinutes" className="text-right">
-                    Trễ (phút)
-                  </Label>
-                  <Input
-                    id="delayMinutes"
-                    type="number"
-                    min="0"
-                    value={formData.delayMinutes}
-                    onChange={(e) => setFormData({ ...formData, delayMinutes: e.target.value })}
-                    className="col-span-3"
-                  />
-                </div>
+                {editingTrip && (
+                  <div className="grid grid-cols-4 items-center gap-4">
+                    <Label htmlFor="delayMinutes" className="text-right">
+                      Trễ (phút)
+                    </Label>
+                    <Input
+                      id="delayMinutes"
+                      type="number"
+                      min="0"
+                      value={formData.delayMinutes}
+                      onChange={(e) => setFormData({ ...formData, delayMinutes: e.target.value })}
+                      className="col-span-3"
+                    />
+                  </div>
+                )}
               </div>
               <DialogFooter>
                 <Button type="submit">{editingTrip ? "Cập nhật" : "Thêm mới"}</Button>
@@ -438,7 +571,9 @@ export default function TripsManagement() {
                               Chỉnh sửa
                             </DropdownMenuItem>
                             {trip.status === "scheduled" && (
-                              <DropdownMenuItem onClick={() => handleUpdateStatus(trip.id, "delayed")}> <AlertTriangle className="mr-2 h-4 w-4" /> Đánh dấu trễ </DropdownMenuItem>
+                              <DropdownMenuItem onClick={() => handleMarkDelayed(trip.id)}>
+                                <AlertTriangle className="mr-2 h-4 w-4" /> Đánh dấu trễ
+                              </DropdownMenuItem>
                             )}
                             {trip.status !== "cancelled" && (
                               <DropdownMenuItem onClick={() => handleUpdateStatus(trip.id, "cancelled")}> <AlertTriangle className="mr-2 h-4 w-4" /> Hủy chuyến </DropdownMenuItem>
@@ -493,6 +628,22 @@ export default function TripsManagement() {
           )}
         </CardContent>
       </Card>
+      {customToast.show && (
+        <div className={`fixed top-4 right-4 z-[9999] p-4 rounded-lg shadow-lg border max-w-sm ` +
+          (customToast.type === 'success' ? 'bg-green-50 border-green-200 text-green-800' :
+            customToast.type === 'error' ? 'bg-red-50 border-red-200 text-red-800' :
+            'bg-blue-50 border-blue-200 text-blue-800')
+        }>
+          <div className="font-semibold">{customToast.title}</div>
+          <div className="text-sm mt-1">{customToast.message}</div>
+          <button
+            onClick={() => setCustomToast({ show: false, title: '', message: '', type: 'info' })}
+            className="absolute top-2 right-2 text-gray-500 hover:text-gray-700"
+          >
+            ×
+          </button>
+        </div>
+      )}
     </div>
   )
 }

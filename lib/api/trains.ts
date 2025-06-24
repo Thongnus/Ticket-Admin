@@ -62,9 +62,10 @@ export const deleteTrain = async (id: number) => {
 
 // Lấy danh sách tàu đang hoạt động (active)
 export const fetchActiveTrains = async (): Promise<Train[]> => {
-  const response = await authApi.fetchWithAuth("/trains/active")
+  const response = await authApi.fetchWithAuth("/trains/status/active")
   if (!response.ok) throw new ApiError({ message: "Lỗi khi lấy danh sách tàu hoạt động", status: response.status })
   const data = await response.json()
+console.log(data)
   return data.map((train: any) => ({
     id: train.trainId,
     trainNumber: train.trainNumber,

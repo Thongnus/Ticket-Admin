@@ -176,7 +176,7 @@ export interface Route {
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8080/api";
 
 export async function fetchActiveRoutes(): Promise<Route[]> {
-  const res = await fetch(`${API_BASE}/routes/active`);
+  const res = await fetch(`${API_BASE}/routes/status/active`);
   if (!res.ok) throw new Error("Không thể tải danh sách tuyến đường");
   return res.json();
 } 

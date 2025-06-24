@@ -24,14 +24,14 @@ export interface TrainDto {
 }
 
 export interface TripDto {
-  tripId: number;
+  tripId?: number;
   route: RouteDto;
   train: TrainDto;
   tripCode: string;
   departureTime: string;
   arrivalTime: string;
   status: string;
-  delayMinutes: number;
+  delayMinutes?: number;
   createdAt: string;
   updatedAt: string;
 }
@@ -58,6 +58,8 @@ export interface FetchTripsParams {
   sort?: string[];
 }
 
+import { authApi } from "../api";
+
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8080/api";
 
 export async function fetchTripsPaged(params: FetchTripsParams): Promise<Page<TripDto>> {
@@ -71,5 +73,73 @@ export async function fetchTripsPaged(params: FetchTripsParams): Promise<Page<Tr
   const url = `${API_BASE}/trips/paged/search?${query.toString()}`;
   const res = await fetch(url);
   if (!res.ok) throw new Error("Failed to fetch trips");
+  return res.json();
+}
+
+// Create a new trip
+export async function createTrip(trip: TripDto): Promise<any> {
+  const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8080/api";
+  const url = `/trips`;
+  const res = await authApi.fetchWithAuth(url, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(trip),
+  });
+  if (!res.ok) throw new Error("Failed to create trip");
+  return res.json();
+}
+
+// Update a trip
+export async function updateTrip(id: number, trip: TripDto): Promise<any> {
+  const res = await authApi.fetchWithAuth(`/trips/${id}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(trip),
+  });
+  if (!res.ok) throw new Error("Failed to update trip");
+  return res.json();
+}
+
+// Delete a trip
+export async function deleteTrip(id: number): Promise<void> {
+  const res = await authApi.fetchWithAuth(`/trips/${id}`, { method: "DELETE" });
+  if (!res.ok) throw new Error("Failed to delete trip");
+}
+
+// Get trip detail
+export async function getTrip(id: number): Promise<TripDto> {
+  const res = await authApi.fetchWithAuth(`/trips/${id}`);
+  if (!res.ok) throw new Error("Failed to get trip detail");
+  const json = await res.json();
+  return json.data;
+}
+
+// Update trip status
+export async function updateTripStatus(id: number, status: string): Promise<any> {
+  const res = await authApi.fetchWithAuth(`/trips/${id}/status?status=${status}`, { method: "PUT" });
+  if (!res.ok) throw new Error("Failed to update trip status");
+  return res.json();
+}
+
+// Mark trip as delayed
+export async function markTripDelayed(id: number): Promise<any> {
+  const res = await authApi.fetchWithAuth(`/trips/${id}/delay`, { method: "POST" });
+  if (!res.ok) throw new Error("Failed to mark trip as delayed");
+  return res.json();
+}
+
+// Get carriages with seats for a trip
+export async function getCarriagesWithSeats(tripId: number): Promise<any> {
+  const res = await authApi.fetchWithAuth(`/trips/${tripId}/carriages-with-seats`);
+  if (!res.ok) throw new Error("Failed to get carriages with seats");
+  return res.json();
+}
+
+// Get tracking info for a trip
+export async function getTracking(tripId: number): Promise<any> {
+  const res = await authApi.fetchWithAuth(`/trips/${tripId}/tracking`);
+  if (!res.ok) throw new Error("Failed to get trip tracking");
   return res.json();
 } 
