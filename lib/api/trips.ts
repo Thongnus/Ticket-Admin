@@ -32,6 +32,7 @@ export interface TripDto {
   arrivalTime: string;
   status: string;
   delayMinutes?: number;
+  delayReason?: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -124,10 +125,13 @@ export async function updateTripStatus(id: number, status: string): Promise<any>
 }
 
 // Mark trip as delayed
-export async function markTripDelayed(id: number): Promise<any> {
-  const res = await authApi.fetchWithAuth(`/trips/${id}/delay`, { method: "POST" });
+export async function markTripDelayed(id: number, delayInMinutes: number, delayReason?: string): Promise<any> {
+  const params = new URLSearchParams();
+  params.append("delayInMinutes", delayInMinutes.toString());
+  if (delayReason) params.append("delayReason", delayReason);
+  const res = await authApi.fetchWithAuth(`/trips/${id}/delay?${params.toString()}`, { method: "POST" });
   if (!res.ok) throw new Error("Failed to mark trip as delayed");
-  return res.json();
+  return res.text();
 }
 
 // Get carriages with seats for a trip

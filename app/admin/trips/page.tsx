@@ -73,6 +73,13 @@ export default function TripsManagement() {
     message: '',
     type: 'info',
   });
+  // State cho dialog nhập số phút trễ
+  const [delayDialog, setDelayDialog] = useState<{
+    open: boolean;
+    tripId: number | null;
+    delayMinutes: string;
+    delayReason: string;
+  }>({ open: false, tripId: null, delayMinutes: "", delayReason: "" });
 
   // Custom toast function
   const showCustomToast = (title: string, message: string, type: 'success' | 'error' | 'info' = 'info') => {
@@ -299,13 +306,17 @@ export default function TripsManagement() {
     }
   };
 
-  const handleMarkDelayed = async (tripId: number) => {
+  // Xử lý xác nhận trễ
+  const handleConfirmDelay = async () => {
+    if (!delayDialog.tripId || !delayDialog.delayMinutes || !delayDialog.delayReason) return;
     setLoading(true);
     try {
-      await markTripDelayed(tripId);
-      showCustomToast("✅ Thành công", "Đã đánh dấu chuyến tàu bị trễ.", "success");
+      await markTripDelayed(delayDialog.tripId, Number(delayDialog.delayMinutes), delayDialog.delayReason);
+      showCustomToast("✅ Thành công", `Đã đánh dấu trễ ${delayDialog.delayMinutes} phút.`, "success");
+      setDelayDialog({ open: false, tripId: null, delayMinutes: "", delayReason: "" });
       loadTrips();
     } catch (err: any) {
+      console.log(err)
       showCustomToast("❌ Lỗi", err.message || "Không thể đánh dấu trễ.", "error");
     } finally {
       setLoading(false);
@@ -571,11 +582,11 @@ export default function TripsManagement() {
                               Chỉnh sửa
                             </DropdownMenuItem>
                             {trip.status === "scheduled" && (
-                              <DropdownMenuItem onClick={() => handleMarkDelayed(trip.id)}>
+                              <DropdownMenuItem onClick={() => setDelayDialog({ open: true, tripId: trip.id, delayMinutes: "", delayReason: "" })}>
                                 <AlertTriangle className="mr-2 h-4 w-4" /> Đánh dấu trễ
                               </DropdownMenuItem>
                             )}
-                            {trip.status !== "cancelled" && (
+                            {(trip.status === "scheduled" || trip.status === "delayed") && (
                               <DropdownMenuItem onClick={() => handleUpdateStatus(trip.id, "cancelled")}> <AlertTriangle className="mr-2 h-4 w-4" /> Hủy chuyến </DropdownMenuItem>
                             )}
                             <DropdownMenuItem onClick={() => handleDelete(trip.id)} className="text-red-600">
@@ -628,6 +639,50 @@ export default function TripsManagement() {
           )}
         </CardContent>
       </Card>
+      {/* Dialog nhập số phút trễ */}
+      <Dialog open={delayDialog.open} onOpenChange={open => setDelayDialog(d => ({ ...d, open }))}>
+        <DialogContent className="sm:max-w-[400px]">
+          <DialogHeader>
+            <DialogTitle>Đánh dấu chuyến tàu bị trễ</DialogTitle>
+            <DialogDescription>Nhập số phút trễ và lý do trễ cho chuyến tàu này.</DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-4 py-4">
+            <div className="grid grid-cols-4 items-center gap-4">
+              <Label htmlFor="delayMinutesInput" className="text-right">Trễ (phút)</Label>
+              <Input
+                id="delayMinutesInput"
+                type="number"
+                min="1"
+                value={delayDialog.delayMinutes}
+                onChange={e => setDelayDialog(d => ({ ...d, delayMinutes: e.target.value }))}
+                className="col-span-3"
+                placeholder="Nhập số phút trễ"
+                required
+              />
+            </div>
+            <div className="grid grid-cols-4 items-center gap-4">
+              <Label htmlFor="delayReasonInput" className="text-right">Lý do trễ</Label>
+              <Input
+                id="delayReasonInput"
+                type="text"
+                value={delayDialog.delayReason}
+                onChange={e => setDelayDialog(d => ({ ...d, delayReason: e.target.value }))}
+                className="col-span-3"
+                placeholder="Nhập lý do trễ"
+                required
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button onClick={handleConfirmDelay} disabled={!delayDialog.delayMinutes || !delayDialog.delayReason || loading}>
+              Xác nhận
+            </Button>
+            <Button variant="outline" onClick={() => setDelayDialog({ open: false, tripId: null, delayMinutes: "", delayReason: "" })}>
+              Hủy
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
       {customToast.show && (
         <div className={`fixed top-4 right-4 z-[9999] p-4 rounded-lg shadow-lg border max-w-sm ` +
           (customToast.type === 'success' ? 'bg-green-50 border-green-200 text-green-800' :
