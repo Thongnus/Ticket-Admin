@@ -146,4 +146,12 @@ export async function getTracking(tripId: number): Promise<any> {
   const res = await authApi.fetchWithAuth(`/trips/${tripId}/tracking`);
   if (!res.ok) throw new Error("Failed to get trip tracking");
   return res.json();
-} 
+}
+
+export async function markTripCancelled(id: number, cancelReason?: string): Promise<any> {
+  const params = new URLSearchParams();
+  if (cancelReason) params.append("cancelReason", cancelReason);
+  const res = await authApi.fetchWithAuth(`/trips/${id}/cancel?${params.toString()}`, { method: "POST" });
+  if (!res.ok) throw new Error("Failed to mark trip as cancelled");
+  return res.text();
+}

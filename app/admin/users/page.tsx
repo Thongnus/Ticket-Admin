@@ -157,6 +157,13 @@ export default function UsersManagement() {
     setCurrentPage(0)
   }, [searchTerm, roleFilter, statusFilter])
 
+  // Đảm bảo nếu currentPage vượt quá totalPages khi totalPages thay đổi (do filter/search), sẽ tự động reset về trang cuối
+  useEffect(() => {
+    if (currentPage > 0 && currentPage >= totalPages) {
+      setCurrentPage(Math.max(0, totalPages - 1));
+    }
+  }, [totalPages, currentPage]);
+
   // Manual refresh function
   const handleRefresh = () => {
     loadUsers()
@@ -179,7 +186,8 @@ export default function UsersManagement() {
   }
 
   const handlePageChange = (newPage: number) => {
-    setCurrentPage(newPage)
+    if (newPage < 0 || newPage >= totalPages) return;
+    setCurrentPage(newPage);
   }
 
   const handleViewDetails = (user: UserDto) => {
@@ -234,6 +242,18 @@ export default function UsersManagement() {
       </div>
     )
   }
+
+  // Helper tạo dải số trang hợp lý cho phân trang
+  const getPageNumbers = () => {
+    const maxButtons = 5;
+    let start = Math.max(0, currentPage - Math.floor(maxButtons / 2));
+    let end = start + maxButtons;
+    if (end > totalPages) {
+      end = totalPages;
+      start = Math.max(0, end - maxButtons);
+    }
+    return Array.from({ length: end - start }, (_, i) => start + i);
+  };
 
   if (loading && users.length === 0) {
     return (
@@ -357,7 +377,7 @@ export default function UsersManagement() {
                 <div className="flex items-center justify-between space-x-2 py-4">
                   <div className="text-sm text-muted-foreground">
                     Hiển thị {currentPage * pageSize + 1} đến {Math.min((currentPage + 1) * pageSize, totalElements)}{" "}
-                    của {totalElements} kết quả
+                    của {totalElements} kết quả | Trang <b>{currentPage + 1}</b> / <b>{totalPages}</b>
                   </div>
                   <div className="flex items-center space-x-2">
                     <Button
@@ -370,20 +390,17 @@ export default function UsersManagement() {
                       Trước
                     </Button>
                     <div className="flex items-center space-x-1">
-                      {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
-                        const pageNumber = Math.max(0, Math.min(currentPage - 2 + i, totalPages - 1))
-                        return (
-                          <Button
-                            key={`page-${pageNumber}-${i}`}
-                            variant={currentPage === pageNumber ? "default" : "outline"}
-                            size="sm"
-                            onClick={() => handlePageChange(pageNumber)}
-                            className="w-8 h-8 p-0"
-                          >
-                            {pageNumber + 1}
-                          </Button>
-                        )
-                      })}
+                      {getPageNumbers().map((pageNumber) => (
+                        <Button
+                          key={`page-${pageNumber}`}
+                          variant={currentPage === pageNumber ? "default" : "outline"}
+                          size="sm"
+                          onClick={() => handlePageChange(pageNumber)}
+                          className="w-8 h-8 p-0"
+                        >
+                          {pageNumber + 1}
+                        </Button>
+                      ))}
                     </div>
                     <Button
                       variant="outline"

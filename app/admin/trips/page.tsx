@@ -21,7 +21,7 @@ import {
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { Edit, MoreHorizontal, Plus, Search, Trash2, Clock, AlertTriangle, Loader2 } from "lucide-react"
 import { useToast } from "@/components/ui/use-toast"
-import { fetchTripsPaged, TripDto, createTrip, updateTrip, deleteTrip, getTrip, updateTripStatus, markTripDelayed } from "@/lib/api/trips"
+import { fetchTripsPaged, TripDto, createTrip, updateTrip, deleteTrip, getTrip, updateTripStatus, markTripDelayed, markTripCancelled } from "@/lib/api/trips"
 import { fetchActiveTrains, Train } from "@/lib/api/trains"
 import { fetchActiveRoutes, Route } from "@/lib/api/routes"
 
@@ -80,6 +80,12 @@ export default function TripsManagement() {
     delayMinutes: string;
     delayReason: string;
   }>({ open: false, tripId: null, delayMinutes: "", delayReason: "" });
+  // State cho dialog nhập lý do hủy
+  const [cancelDialog, setCancelDialog] = useState<{
+    open: boolean;
+    tripId: number | null;
+    cancelReason: string;
+  }>({ open: false, tripId: null, cancelReason: "" });
 
   // Custom toast function
   const showCustomToast = (title: string, message: string, type: 'success' | 'error' | 'info' = 'info') => {
@@ -316,8 +322,41 @@ export default function TripsManagement() {
       setDelayDialog({ open: false, tripId: null, delayMinutes: "", delayReason: "" });
       loadTrips();
     } catch (err: any) {
-      console.log(err)
-      showCustomToast("❌ Lỗi", err.message || "Không thể đánh dấu trễ.", "error");
+      let errorMsg = "Không thể đánh dấu trễ.";
+      if (err instanceof Response) {
+        try {
+          const data = await err.json();
+          errorMsg = data.message || errorMsg;
+        } catch {}
+      } else if (err?.message) {
+        errorMsg = err.message;
+      }
+      showCustomToast("❌ Lỗi", errorMsg, "error");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Xử lý xác nhận hủy chuyến
+  const handleConfirmCancel = async () => {
+    if (!cancelDialog.tripId || !cancelDialog.cancelReason) return;
+    setLoading(true);
+    try {
+      await markTripCancelled(cancelDialog.tripId, cancelDialog.cancelReason);
+      showCustomToast("✅ Thành công", "Đã hủy chuyến tàu.", "success");
+      setCancelDialog({ open: false, tripId: null, cancelReason: "" });
+      loadTrips();
+    } catch (err: any) {
+      let errorMsg = "Không thể hủy chuyến tàu.";
+      if (err instanceof Response) {
+        try {
+          const data = await err.json();
+          errorMsg = data.message || errorMsg;
+        } catch {}
+      } else if (err?.message) {
+        errorMsg = err.message;
+      }
+      showCustomToast("❌ Lỗi", errorMsg, "error");
     } finally {
       setLoading(false);
     }
@@ -587,7 +626,7 @@ export default function TripsManagement() {
                               </DropdownMenuItem>
                             )}
                             {(trip.status === "scheduled" || trip.status === "delayed") && (
-                              <DropdownMenuItem onClick={() => handleUpdateStatus(trip.id, "cancelled")}> <AlertTriangle className="mr-2 h-4 w-4" /> Hủy chuyến </DropdownMenuItem>
+                              <DropdownMenuItem onClick={() => setCancelDialog({ open: true, tripId: trip.id, cancelReason: "" })}> <AlertTriangle className="mr-2 h-4 w-4" /> Hủy chuyến </DropdownMenuItem>
                             )}
                             <DropdownMenuItem onClick={() => handleDelete(trip.id)} className="text-red-600">
                               <Trash2 className="mr-2 h-4 w-4" />
@@ -678,6 +717,37 @@ export default function TripsManagement() {
               Xác nhận
             </Button>
             <Button variant="outline" onClick={() => setDelayDialog({ open: false, tripId: null, delayMinutes: "", delayReason: "" })}>
+              Hủy
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+      {/* Dialog nhập lý do hủy chuyến */}
+      <Dialog open={cancelDialog.open} onOpenChange={open => setCancelDialog(d => ({ ...d, open }))}>
+        <DialogContent className="sm:max-w-[400px]">
+          <DialogHeader>
+            <DialogTitle>Hủy chuyến tàu</DialogTitle>
+            <DialogDescription>Nhập lý do hủy chuyến tàu này.</DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-4 py-4">
+            <div className="grid grid-cols-4 items-center gap-4">
+              <Label htmlFor="cancelReasonInput" className="text-right">Lý do hủy</Label>
+              <Input
+                id="cancelReasonInput"
+                type="text"
+                value={cancelDialog.cancelReason}
+                onChange={e => setCancelDialog(d => ({ ...d, cancelReason: e.target.value }))}
+                className="col-span-3"
+                placeholder="Nhập lý do hủy"
+                required
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button onClick={handleConfirmCancel} disabled={!cancelDialog.cancelReason || loading}>
+              Xác nhận
+            </Button>
+            <Button variant="outline" onClick={() => setCancelDialog({ open: false, tripId: null, cancelReason: "" })}>
               Hủy
             </Button>
           </DialogFooter>

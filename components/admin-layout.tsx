@@ -63,16 +63,10 @@ export function AdminLayout({ children }: AdminLayoutProps) {
       active: pathname === "/admin/trains",
     },
     {
-      href: "/admin/cars",
-      label: "Quản lý toa tàu",
+      href: "/admin/carriageseat",
+      label: "Quản lý toa & ghế",
       icon: Sofa,
-      active: pathname === "/admin/cars",
-    },
-    {
-      href: "/admin/seats",
-      label: "Quản lý ghế",
-      icon: Armchair,
-      active: pathname === "/admin/seats",
+      active: pathname === "/admin/carriageseat",
     },
     {
       href: "/admin/stations",
