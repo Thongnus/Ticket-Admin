@@ -91,6 +91,12 @@ export function AdminLayout({ children }: AdminLayoutProps) {
       label: "Đặt vé",
       icon: BarChart,
       active: pathname === "/admin/bookings",
+    }, 
+    {
+      href: "/admin/refunds",
+      label: "Hoàn vé",
+      icon: BarChart,
+      active: pathname === "/admin/refunds",
     },
     {
       href: "/admin/users",

@@ -11,6 +11,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Eye, MoreHorizontal, Search, X, RefreshCw } from "lucide-react"
 import { useToast } from "@/components/ui/use-toast"
+import { getBookings, cancelBookingByAdmin } from "@/lib/api/bookings"
 
 // Giao diện UserDto
 interface UserDto {
@@ -18,24 +19,40 @@ interface UserDto {
   username: string
   fullName: string | null
   email: string | null
+  // ... các trường khác nếu cần
+}
+
+interface TripDto {
+  tripId: number
+  tripCode: string
+  departureTime: string
+  arrivalTime: string
+  route: {
+    routeId: number
+    routeName: string
+    originStationName: string
+    destinationStationName: string
+    // ... các trường khác nếu cần
+  }
+  // ... các trường khác nếu cần
 }
 
 // Giao diện Booking
 interface Booking {
-  id: number
+  bookingId: number
   bookingCode: string
-  bookingDate: number[]
+  bookingDate: string
   totalAmount: number
   paymentStatus: string
   bookingStatus: string
   paymentMethod: string
-  paymentDate: number[] | null
-  createdAt: number[]
-  updatedAt: number[]
+  paymentDate: string | null
+  createdAt: string
+  updatedAt: string
+  contactEmail: string
+  contactPhone: string
   user: UserDto
-  tripCode?: string | null
-  route?: string | null
-  departureTime?: string | null
+  tripDto: TripDto
   ticketCount?: number | null
 }
 
@@ -76,17 +93,7 @@ export default function BookingsManagement() {
     const fetchBookings = async () => {
       try {
         setLoading(true)
-        const res = await fetch(`${baseUrl}/bookings`, {
-          headers: {
-            Authorization: `Bearer ${localStorage.getItem("token") || ""}`,
-            "Content-Type": "application/json",
-          },
-        })
-        if (!res.ok) {
-          const errorData = await res.json()
-          throw new Error(errorData.message || "Lỗi khi gọi API")
-        }
-        const data = await res.json()
+        const data = await getBookings()
         if (!Array.isArray(data.content)) {
           throw new Error("Trường 'content' không phải mảng")
         }
@@ -105,14 +112,14 @@ export default function BookingsManagement() {
     }
 
     fetchBookings()
-  }, [baseUrl, toast])
+  }, [toast])
 
   // Lọc phía client
   const filteredBookings = bookings.filter((booking: Booking) => {
     const matchesSearch =
       booking.bookingCode.toLowerCase().includes(searchTerm.toLowerCase()) ||
       booking.user?.fullName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      booking.user?.email?.toLowerCase().includes(searchTerm.toLowerCase())
+      booking.contactEmail?.toLowerCase().includes(searchTerm.toLowerCase())
     const matchesStatus = statusFilter === "all" || booking.bookingStatus.toLowerCase() === statusFilter
     const matchesPayment = paymentFilter === "all" || booking.paymentStatus.toLowerCase() === paymentFilter
     return matchesSearch && matchesStatus && matchesPayment
@@ -123,11 +130,13 @@ export default function BookingsManagement() {
     return new Intl.NumberFormat("vi-VN", { style: "currency", currency: "VND" }).format(price)
   }
 
-  // Chuyển mảng ngày thành Date
-  const parseApiDate = (dateArray: number[] | null): Date | null => {
-    if (!dateArray) return null
-    const [year, month, day, hour, minute, second] = dateArray
-    return new Date(year, month - 1, day, hour, minute, second)
+  // Chuyển string ngày thành Date
+  const parseApiDate = (dateString: string | null): Date | null => {
+    if (!dateString) return null
+    // Hỗ trợ cả định dạng "YYYY-MM-DD HH:mm:ss" và ISO
+    const isoString = dateString.includes('T') ? dateString : dateString.replace(' ', 'T')
+    const date = new Date(isoString)
+    return isNaN(date.getTime()) ? null : date
   }
 
   // Lấy badge trạng thái thanh toán
@@ -157,8 +166,8 @@ export default function BookingsManagement() {
   // Cập nhật trạng thái (local)
   const handleUpdateStatus = (bookingId: number, newStatus: string) => {
     setBookings(
-      bookings.map((booking: { id: number }) =>
-        booking.id === bookingId ? { ...booking, bookingStatus: newStatus } : booking,
+      bookings.map((booking) =>
+        booking.bookingId === bookingId ? { ...booking, bookingStatus: newStatus } : booking,
       ),
     )
     toast({
@@ -167,17 +176,26 @@ export default function BookingsManagement() {
     })
   }
 
-  // Hủy đặt vé (local)
-  const handleCancelBooking = (bookingId: number) => {
-    setBookings(
-      bookings.map((booking: { id: number }) =>
-        booking.id === bookingId ? { ...booking, bookingStatus: "cancelled", paymentStatus: "cancelled" } : booking,
-      ),
-    )
-    toast({
-      title: "Hủy thành công",
-      description: "Đặt vé đã được hủy.",
-    })
+  // Hủy đặt vé (gọi API)
+  const handleCancelBooking = async (bookingId: number) => {
+    try {
+      await cancelBookingByAdmin(bookingId)
+      setBookings(
+        bookings.map((booking) =>
+          booking.bookingId === bookingId ? { ...booking, bookingStatus: "cancelled", paymentStatus: "cancelled" } : booking,
+        ),
+      )
+      toast({
+        title: "Hủy thành công",
+        description: "Đặt vé đã được hủy.",
+      })
+    } catch (error: any) {
+      toast({
+        title: "Lỗi",
+        description: error.message || "Không thể hủy đặt vé.",
+        variant: "destructive",
+      })
+    }
   }
 
   return (
@@ -257,18 +275,19 @@ export default function BookingsManagement() {
               </TableHeader>
               <TableBody>
                 {filteredBookings.map((booking: Booking) => (
-                  <TableRow key={booking.id}>
+                  <TableRow key={booking.bookingId}>
                     <TableCell className="font-medium">{booking.bookingCode}</TableCell>
                     <TableCell>
                       <div>
                         <div className="font-medium">{booking.user?.fullName || booking.user?.username || null }</div>
-                        <div className="text-sm text-muted-foreground">{booking.user?.email || null }</div>
+                        <div className="text-sm text-muted-foreground">{booking.contactEmail || booking.user?.email || null }</div>
+                        <div className="text-sm text-muted-foreground">{booking.contactPhone || null }</div>
                       </div>
                     </TableCell>
                     <TableCell>
                       <div>
-                        <div className="font-medium">{booking.tripCode || "N/A"}</div>
-                        <div className="text-sm text-muted-foreground">{booking.route || "N/A"}</div>
+                        <div className="font-medium">{booking.tripDto?.tripCode || "N/A"}</div>
+                        <div className="text-sm text-muted-foreground">{booking.tripDto?.route?.routeName || "N/A"}</div>
                       </div>
                     </TableCell>
                     <TableCell>{booking.ticketCount || "N/A"} vé</TableCell>
@@ -293,7 +312,7 @@ export default function BookingsManagement() {
                           </DropdownMenuItem>
                           {booking.bookingStatus.toLowerCase() === "pending" && (
                             <DropdownMenuItem
-                              onClick={() => handleUpdateStatus(booking.id, "confirmed")}
+                              onClick={() => handleUpdateStatus(booking.bookingId, "confirmed")}
                             >
                               <RefreshCw className="mr-2 h-4 w-4" />
                               Xác nhận
@@ -301,7 +320,7 @@ export default function BookingsManagement() {
                           )}
                           {booking.bookingStatus.toLowerCase() !== "cancelled" && (
                             <DropdownMenuItem
-                              onClick={() => handleCancelBooking(booking.id)}
+                              onClick={() => handleCancelBooking(booking.bookingId)}
                               className="text-red-600"
                             >
                               <X className="mr-2 h-4 w-4" />
@@ -340,7 +359,11 @@ export default function BookingsManagement() {
                     </p>
                     <p>
                       <span className="font-medium">Email:</span>{" "}
-                      {selectedBooking.user.email || "N/A"}
+                      {selectedBooking.contactEmail || selectedBooking.user.email || "N/A"}
+                    </p>
+                    <p>
+                      <span className="font-medium">Số điện thoại:</span>{" "}
+                      {selectedBooking.contactPhone || "N/A"}
                     </p>
                   </div>
                 </div>
@@ -349,17 +372,15 @@ export default function BookingsManagement() {
                   <div className="space-y-1 text-sm">
                     <p>
                       <span className="font-medium">Mã chuyến:</span>{" "}
-                      {selectedBooking.tripCode || "N/A"}
+                      {selectedBooking.tripDto?.tripCode || "N/A"}
                     </p>
                     <p>
                       <span className="font-medium">Tuyến:</span>{" "}
-                      {selectedBooking.route || "N/A"}
+                      {selectedBooking.tripDto?.route?.routeName || "N/A"}
                     </p>
                     <p>
                       <span className="font-medium">Khởi hành:</span>{" "}
-                      {selectedBooking.departureTime
-                        ? new Date(selectedBooking.departureTime).toLocaleString("vi-VN")
-                        : "N/A"}
+                      {selectedBooking.tripDto?.departureTime || "N/A"}
                     </p>
                   </div>
                 </div>
