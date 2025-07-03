@@ -35,6 +35,7 @@ import {
   CreditCard,
 } from "lucide-react"
 import { useToast } from "@/components/ui/use-toast"
+import { getRefundRequests, getRefundRequestById, approveRefundRequest, rejectRefundRequest } from "@/lib/api/refunds"
 
 // Interfaces
 interface PaymentDto {
@@ -70,130 +71,147 @@ interface PaymentDto {
 }
 
 interface RefundRequest {
+  refundRequestId: number
+  bookingId: number
+  bookingCode: string
+  customerName: string
+  customerEmail: string
+  customerPhone: string
+  bookingStatus: string
   paymentId: number
-  payment: PaymentDto
-  refundReason?: string
+  paymentAmount: number
+  paymentMethod: string
+  paymentStatus: string
+  refundPolicyId: number
+  policyName: string
+  policyRefundPercent: number
+  originalAmount: number
+  discountAmount: number
+  netAmount: number
   refundAmount: number
-  requestedAt: string
-  processedAt?: string
-  processedBy?: string
+  refundPercentage: number
+  hoursBeforeDeparture: number
   status: string
+  requestDate: string
+  processedDate: string | null
+  adminNote: string | null
+  rejectionReason: string | null
+  createdAt: string
+  updatedAt: string
+  tripCode: string
+  routeName: string
+  departureTime: string
+  originStationName: string
+  destinationStationName: string
 }
 
 // FAKE DATA (chỉ dùng khi phát triển hoặc không có API)
 const FAKE_REFUND_REQUESTS: RefundRequest[] = [
   {
+    refundRequestId: 1,
+    bookingId: 101,
+    bookingCode: "BK20240601A",
+    customerName: "Nguyễn Văn A",
+    customerEmail: "vana@example.com",
+    customerPhone: "0912345678",
+    bookingStatus: "refund_processing",
     paymentId: 1,
-    payment: {
-      paymentId: 1,
-      paymentAmount: 500000,
-      paymentDate: "2024-06-01 10:00:00",
-      paymentMethod: "credit_card",
-      transactionId: "TXN123456",
-      status: "refund_requested",
-      booking: {
-        bookingId: 101,
-        bookingCode: "BK20240601A",
-        totalAmount: 500000,
-        user: {
-          userId: 1,
-          username: "nguyenvana",
-          fullName: "Nguyễn Văn A",
-          email: "vana@example.com",
-        },
-        tripDto: {
-          tripId: 1,
-          tripCode: "T1234",
-          departureTime: "2024-06-10T08:00:00Z",
-          route: {
-            routeName: "Hà Nội - Sài Gòn",
-            originStationName: "Ga Hà Nội",
-            destinationStationName: "Ga Sài Gòn",
-          },
-        },
-      },
-    },
-    refundReason: "Khách đổi lịch",
+    paymentAmount: 500000,
+    paymentMethod: "credit_card",
+    paymentStatus: "refund_pending",
+    refundPolicyId: 1,
+    policyName: "Hoàn toàn bộ tiền trước 24h",
+    policyRefundPercent: 100,
+    tripCode: "T1234",
+    routeName: "Hà Nội - Sài Gòn",
+    departureTime: "2024-06-10T08:00:00Z",
+    originStationName: "Ga Hà Nội",
+    destinationStationName: "Ga Sài Gòn",
+    originalAmount: 500000,
+    discountAmount: 0,
+    netAmount: 500000,
     refundAmount: 500000,
-    requestedAt: "2024-06-01 11:00:00",
-    status: "refund_requested",
+    refundPercentage: 100,
+    hoursBeforeDeparture: 30,
+    status: "pending",
+    requestDate: "2024-06-01 11:00:00",
+    processedDate: null,
+    adminNote: null,
+    rejectionReason: null,
+    createdAt: "2024-06-01 11:00:00",
+    updatedAt: "2024-06-01 11:00:00"
   },
   {
+    refundRequestId: 2,
+    bookingId: 102,
+    bookingCode: "BK20240602B",
+    customerName: "Trần Thị B",
+    customerEmail: "tranb@example.com",
+    customerPhone: "0987654321",
+    bookingStatus: "refund_processing",
     paymentId: 2,
-    payment: {
-      paymentId: 2,
-      paymentAmount: 300000,
-      paymentDate: "2024-06-02 09:00:00",
-      paymentMethod: "bank_transfer",
-      transactionId: "TXN654321",
-      status: "refund_pending",
-      booking: {
-        bookingId: 102,
-        bookingCode: "BK20240602B",
-        totalAmount: 300000,
-        user: {
-          userId: 2,
-          username: "tranthib",
-          fullName: "Trần Thị B",
-          email: "tranb@example.com",
-        },
-        tripDto: {
-          tripId: 2,
-          tripCode: "T5678",
-          departureTime: "2024-06-12T09:00:00Z",
-          route: {
-            routeName: "Hà Nội - Đà Nẵng",
-            originStationName: "Ga Hà Nội",
-            destinationStationName: "Ga Đà Nẵng",
-          },
-        },
-      },
-    },
-    refundReason: "Lý do cá nhân",
-    refundAmount: 250000,
-    requestedAt: "2024-06-02 10:00:00",
-    status: "refund_pending",
-  },
+    paymentAmount: 300000,
+    paymentMethod: "bank_transfer",
+    paymentStatus: "refund_pending",
+    refundPolicyId: 1,
+    policyName: "Hoàn 80% tiền trước 12h",
+    policyRefundPercent: 80,
+    tripCode: "T5678",
+    routeName: "Hà Nội - Đà Nẵng",
+    departureTime: "2024-06-12T09:00:00Z",
+    originStationName: "Ga Hà Nội",
+    destinationStationName: "Ga Đà Nẵng",
+    originalAmount: 350000,
+    discountAmount: 50000,
+    netAmount: 300000,
+    refundAmount: 240000,
+    refundPercentage: 80,
+    hoursBeforeDeparture: 15,
+    status: "pending",
+    requestDate: "2024-06-02 10:00:00",
+    processedDate: null,
+    adminNote: null,
+    rejectionReason: null,
+    createdAt: "2024-06-02 10:00:00",
+    updatedAt: "2024-06-02 10:00:00"
+  }
 ]
 
 const FAKE_REFUND_HISTORY: RefundRequest[] = [
   {
+    refundRequestId: 3,
+    bookingId: 103,
+    bookingCode: "BK20240530C",
+    customerName: "Lê Thị C",
+    customerEmail: "lec@example.com",
+    customerPhone: "0911222333",
+    bookingStatus: "refunded",
     paymentId: 3,
-    payment: {
-      paymentId: 3,
-      paymentAmount: 400000,
-      paymentDate: "2024-05-30 08:00:00",
-      paymentMethod: "e_wallet",
-      transactionId: "TXN789012",
-      status: "refunded",
-      booking: {
-        bookingId: 103,
-        bookingCode: "BK20240530C",
-        totalAmount: 400000,
-        user: {
-          userId: 3,
-          username: "lethic",
-          fullName: "Lê Thị C",
-          email: "lec@example.com",
-        },
-        tripDto: {
-          tripId: 3,
-          tripCode: "T9101",
-          departureTime: "2024-06-15T07:00:00Z",
-          route: {
-            routeName: "Hà Nội - Huế",
-            originStationName: "Ga Hà Nội",
-            destinationStationName: "Ga Huế",
-          },
-        },
-      },
-    },
-    refundAmount: 400000,
-    requestedAt: "2024-05-30 09:00:00",
-    processedAt: "2024-05-30 12:00:00",
-    processedBy: "Admin",
+    paymentAmount: 400000,
+    paymentMethod: "e_wallet",
+    paymentStatus: "refunded",
+    refundPolicyId: 2,
+    policyName: "Hoàn 50% tiền trước 6h",
+    policyRefundPercent: 50,
+    tripCode: "T9101",
+    routeName: "Hà Nội - Huế",
+    departureTime: "2024-06-15T07:00:00Z",
+    originStationName: "Ga Hà Nội",
+    destinationStationName: "Ga Huế",
+    originalAmount: 400000,
+    discountAmount: 0,
+    netAmount: 400000,
+    refundAmount: 200000,
+    refundPercentage: 50,
+    hoursBeforeDeparture: 7,
     status: "refunded",
-  },
+    requestDate: "2024-05-30 09:00:00",
+    processedDate: "2024-05-30 12:00:00",
+    adminNote: "Đã hoàn tiền cho khách",
+    rejectionReason: null,
+    createdAt: "2024-05-30 09:00:00",
+    updatedAt: "2024-05-30 12:00:00"
+  }
 ]
 
 export default function RefundsManagement() {
@@ -208,12 +226,19 @@ export default function RefundsManagement() {
   const [isProcessDialogOpen, setIsProcessDialogOpen] = useState(false)
   const [processAction, setProcessAction] = useState<"approve" | "reject">("approve")
   const [processReason, setProcessReason] = useState("")
+  const [page, setPage] = useState(0)
+  const [size, setSize] = useState(10)
+  const [totalPages, setTotalPages] = useState(1)
+  const [totalElements, setTotalElements] = useState(0)
 
   const refundStatusOptions = [
-    { value: "refund_requested", label: "Yêu cầu hoàn tiền", color: "bg-yellow-100 text-yellow-800" },
-    { value: "refund_pending", label: "Đang xử lý", color: "bg-blue-100 text-blue-800" },
+    { value: "pending", label: "Chờ duyệt", color: "bg-yellow-100 text-yellow-800" },
+    { value: "approved", label: "Đã duyệt", color: "bg-blue-100 text-blue-800" },
+    { value: "reject", label: "Từ chối", color: "bg-red-100 text-red-800" },
+    { value: "refund_requested", label: "Chờ duyệt", color: "bg-yellow-100 text-yellow-800" },
+    { value: "refund_pending", label: "Chờ hoàn tiền", color: "bg-yellow-100 text-yellow-800" },
     { value: "refunded", label: "Đã hoàn tiền", color: "bg-green-100 text-green-800" },
-    { value: "refund_rejected", label: "Từ chối hoàn tiền", color: "bg-red-100 text-red-800" },
+    { value: "refund_rejected", label: "Từ chối", color: "bg-red-100 text-red-800" },
   ]
 
   const paymentMethods = [
@@ -226,20 +251,32 @@ export default function RefundsManagement() {
   // Fetch data
   useEffect(() => {
     setLoading(true)
-    setRefundRequests(FAKE_REFUND_REQUESTS)
+    getRefundRequests(page, size)
+      .then((data) => {
+        setRefundRequests(data.content || [])
+        setTotalPages(data.totalPages || 1)
+        setTotalElements(data.totalElements || 0)
+      })
+      .catch((error) => {
+        setRefundRequests([])
+        toast({
+          title: "Lỗi",
+          description: error instanceof Error ? error.message : "Không thể tải dữ liệu hoàn tiền.",
+          variant: "destructive",
+        })
+      })
+      .finally(() => setLoading(false))
     setRefundHistory(FAKE_REFUND_HISTORY)
-    setLoading(false)
-  }, [])
+  }, [toast, page, size])
 
   // Filter refunds
   const filteredRequests = refundRequests.filter((refund) => {
     const matchesSearch =
-      refund.payment.booking.bookingCode.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      refund.payment.transactionId?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      refund.payment.booking.user.fullName?.toLowerCase().includes(searchTerm.toLowerCase())
-
-    const matchesStatus = statusFilter === "all" || refund.status.toLowerCase() === statusFilter
-
+      refund.bookingCode?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      refund.customerName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      refund.customerEmail?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      refund.paymentId?.toString().includes(searchTerm)
+    const matchesStatus = statusFilter === "all" || refund.status?.toLowerCase() === statusFilter
     return matchesSearch && matchesStatus
   })
 
@@ -258,6 +295,9 @@ export default function RefundsManagement() {
 
   // Get status badge
   const getStatusBadge = (status: string) => {
+    if (typeof status !== "string") {
+      return <Badge className="bg-gray-100 text-gray-800">{status ?? "Không xác định"}</Badge>
+    }
     const statusOption = refundStatusOptions.find((option) => option.value === status.toLowerCase())
     return <Badge className={statusOption?.color || "bg-gray-100 text-gray-800"}>{statusOption?.label || status}</Badge>
   }
@@ -269,9 +309,20 @@ export default function RefundsManagement() {
   }
 
   // View details
-  const handleViewDetails = (refund: RefundRequest) => {
-    setSelectedRefund(refund)
-    setIsDetailDialogOpen(true)
+  const handleViewDetails = async (refund: RefundRequest) => {
+    try {
+      const detail = await getRefundRequestById(refund.refundRequestId)
+      setSelectedRefund(detail)
+    } catch (error: any) {
+      toast({
+        title: "Lỗi",
+        description: error.message || "Không thể lấy chi tiết yêu cầu hoàn tiền.",
+        variant: "destructive",
+      })
+      setSelectedRefund(refund)
+    } finally {
+      setIsDetailDialogOpen(true)
+    }
   }
 
   // Process refund
@@ -282,41 +333,48 @@ export default function RefundsManagement() {
     setIsProcessDialogOpen(true)
   }
 
-  // Confirm process
+  // Thêm hàm showCustomToast
+  const showCustomToast = (title: string, message: string, type: 'success' | 'error' | 'info' = 'info') => {
+    toast({
+      title,
+      description: message,
+      variant: type === 'success' ? 'default' : type === 'error' ? 'destructive' : 'default',
+    });
+  };
+
+  // Sửa handleConfirmProcess:
   const handleConfirmProcess = async () => {
-    if (!selectedRefund) return
-
+    if (!selectedRefund) return;
     try {
-      // await processRefund(selectedRefund.paymentId, processAction, processReason)
-
-      // Update local state
-      setRefundRequests(
-        refundRequests.map((refund) =>
-          refund.paymentId === selectedRefund.paymentId
-            ? {
-                ...refund,
-                status: processAction === "approve" ? "refunded" : "refund_rejected",
-                processedAt: new Date().toISOString(),
-                processedBy: "Admin",
-              }
-            : refund,
-        ),
-      )
-
-      toast({
-        title: "Thành công",
-        description: `${processAction === "approve" ? "Đã duyệt" : "Đã từ chối"} yêu cầu hoàn tiền.`,
-      })
-
-      setIsProcessDialogOpen(false)
+      if (processAction === "approve") {
+        await approveRefundRequest(selectedRefund.refundRequestId, processReason);
+      } else {
+        await rejectRefundRequest(selectedRefund.refundRequestId, processReason);
+      }
+      // Lấy lại chi tiết mới nhất
+      const updatedDetail = await getRefundRequestById(selectedRefund.refundRequestId);
+      setSelectedRefund(updatedDetail);
+      // Cập nhật danh sách (refetch toàn bộ, đúng page/size)
+      const newList = await getRefundRequests(page, size);
+      setRefundRequests(newList.content || []);
+      setTotalPages(newList.totalPages || 1);
+      setTotalElements(newList.totalElements || 0);
+      showCustomToast(
+        "✅ Thành công",
+        processAction === "approve"
+          ? "Yêu cầu hoàn tiền đã được duyệt."
+          : "Yêu cầu hoàn tiền đã bị từ chối.",
+        "success"
+      );
+      setIsProcessDialogOpen(false);
     } catch (error: any) {
-      toast({
-        title: "Lỗi",
-        description: error.message || "Không thể xử lý yêu cầu hoàn tiền.",
-        variant: "destructive",
-      })
+      showCustomToast(
+        "❌ Lỗi",
+        error.message || "Không thể xử lý yêu cầu hoàn tiền.",
+        "error"
+      );
     }
-  }
+  };
 
   // Calculate refund statistics
   const stats = {
@@ -326,6 +384,57 @@ export default function RefundsManagement() {
     rejected: refundRequests.filter((r) => r.status === "refund_rejected").length,
     totalAmount: refundRequests.reduce((sum, r) => sum + r.refundAmount, 0),
   }
+
+  // Thêm hàm alias trạng thái tiếng Việt
+  const getStatusLabel = (status: string) => {
+    switch (status) {
+      case 'pending':
+        return 'Chờ duyệt';
+      case 'approved':
+        return 'Đã duyệt';
+      case 'reject':
+        return 'Từ chối';
+      default:
+        return status;
+    }
+  };
+
+  // Thêm các hàm alias trạng thái tiếng Việt cho bookingStatus và paymentStatus
+  const getBookingStatusLabel = (status: string) => {
+    switch (status) {
+      case 'pending':
+        return 'Chờ xử lý';
+      case 'confirmed':
+        return 'Đã xác nhận';
+      case 'cancelled':
+        return 'Đã hủy';
+      case 'completed':
+        return 'Hoàn thành';
+      case 'refund_processing':
+        return 'Đang hoàn tiền';
+      case 'refunded':
+        return 'Đã hoàn tiền';
+      default:
+        return status;
+    }
+  };
+
+  const getPaymentStatusLabel = (status: string) => {
+    switch (status) {
+      case 'pending':
+        return 'Chờ thanh toán';
+      case 'paid':
+        return 'Đã thanh toán';
+      case 'cancelled':
+        return 'Đã hủy';
+      case 'refund_pending':
+        return 'Chờ hoàn tiền';
+      case 'refunded':
+        return 'Đã hoàn tiền';
+      default:
+        return status;
+    }
+  };
 
   return (
     <div className="flex flex-1 flex-col gap-6">
@@ -454,28 +563,26 @@ export default function RefundsManagement() {
                   </TableHeader>
                   <TableBody>
                     {filteredRequests.map((refund) => (
-                      <TableRow key={refund.paymentId}>
-                        <TableCell className="font-medium">{refund.payment.booking.bookingCode}</TableCell>
+                      <TableRow key={refund.refundRequestId}>
+                        <TableCell className="font-medium">{refund.bookingCode}</TableCell>
                         <TableCell>
                           <div>
-                            <div className="font-medium">
-                              {refund.payment.booking.user.fullName || refund.payment.booking.user.username}
-                            </div>
-                            <div className="text-sm text-muted-foreground">{refund.payment.booking.user.email}</div>
+                            <div className="font-medium">{refund.customerName}</div>
+                            <div className="text-sm text-muted-foreground">{refund.customerEmail}</div>
                           </div>
                         </TableCell>
                         <TableCell>
                           <div>
-                            <div className="font-medium">{refund.payment.booking.tripDto.tripCode}</div>
+                            <div className="font-medium">{refund.tripCode}</div>
                             <div className="text-sm text-muted-foreground">
-                              {refund.payment.booking.tripDto.route.routeName}
+                              {refund.routeName}
                             </div>
                           </div>
                         </TableCell>
                         <TableCell className="font-medium text-red-600">{formatPrice(refund.refundAmount)}</TableCell>
-                        <TableCell>{getPaymentMethodLabel(refund.payment.paymentMethod)}</TableCell>
+                        <TableCell>{getPaymentMethodLabel(refund.paymentMethod)}</TableCell>
                         <TableCell>{getStatusBadge(refund.status)}</TableCell>
-                        <TableCell>{parseApiDate(refund.requestedAt)?.toLocaleDateString("vi-VN") || "N/A"}</TableCell>
+                        <TableCell>{parseApiDate(refund.requestDate)?.toLocaleDateString("vi-VN") || "N/A"}</TableCell>
                         <TableCell className="text-right">
                           <DropdownMenu>
                             <DropdownMenuTrigger asChild>
@@ -489,7 +596,7 @@ export default function RefundsManagement() {
                                 <Eye className="mr-2 h-4 w-4" />
                                 Xem chi tiết
                               </DropdownMenuItem>
-                              {(refund.status === "refund_requested" || refund.status === "refund_pending") && (
+                              {refund.status === "pending" && (
                                 <>
                                   <DropdownMenuItem
                                     onClick={() => handleProcessRefund(refund, "approve")}
@@ -517,6 +624,42 @@ export default function RefundsManagement() {
               )}
             </CardContent>
           </Card>
+
+          {/* Pagination */}
+          <div className="flex flex-wrap justify-between items-center mt-4 gap-2">
+            <div>
+              Trang <b>{page + 1}</b> / <b>{totalPages}</b> ({totalElements} yêu cầu)
+            </div>
+            <div className="flex items-center gap-2">
+              <Button variant="outline" size="sm" disabled={page === 0} onClick={() => setPage(0)}>
+                Đầu
+              </Button>
+              <Button variant="outline" size="sm" disabled={page === 0} onClick={() => setPage(page - 1)}>
+                Trước
+              </Button>
+              <span>
+                <Input
+                  type="number"
+                  min={1}
+                  max={totalPages}
+                  value={page + 1}
+                  onChange={e => {
+                    let val = Number(e.target.value)
+                    if (isNaN(val) || val < 1) val = 1
+                    if (val > totalPages) val = totalPages
+                    setPage(val - 1)
+                  }}
+                  className="w-14 h-8 px-2 text-center"
+                />
+              </span>
+              <Button variant="outline" size="sm" disabled={page + 1 >= totalPages} onClick={() => setPage(page + 1)}>
+                Sau
+              </Button>
+              <Button variant="outline" size="sm" disabled={page + 1 >= totalPages} onClick={() => setPage(totalPages - 1)}>
+                Cuối
+              </Button>
+            </div>
+          </div>
         </TabsContent>
 
         <TabsContent value="history" className="space-y-4">
@@ -543,14 +686,14 @@ export default function RefundsManagement() {
                   <TableBody>
                     {refundHistory.map((refund) => (
                       <TableRow key={refund.paymentId}>
-                        <TableCell className="font-medium">{refund.payment.booking.bookingCode}</TableCell>
+                        <TableCell className="font-medium">{refund.bookingCode}</TableCell>
                         <TableCell>
-                          {refund.payment.booking.user.fullName || refund.payment.booking.user.username}
+                          {refund.customerName || refund.customerEmail}
                         </TableCell>
                         <TableCell className="font-medium">{formatPrice(refund.refundAmount)}</TableCell>
                         <TableCell>{getStatusBadge(refund.status)}</TableCell>
-                        <TableCell>{parseApiDate(refund.processedAt)?.toLocaleDateString("vi-VN") || "N/A"}</TableCell>
-                        <TableCell>{refund.processedBy || "N/A"}</TableCell>
+                        <TableCell>{parseApiDate(refund.processedDate)?.toLocaleDateString("vi-VN") || "N/A"}</TableCell>
+                        <TableCell>{refund.adminNote || "N/A"}</TableCell>
                       </TableRow>
                     ))}
                   </TableBody>
@@ -571,140 +714,81 @@ export default function RefundsManagement() {
 
           {selectedRefund && (
             <div className="grid gap-6 py-4">
-              {/* Customer Info */}
               <div className="grid grid-cols-2 gap-6">
                 <Card>
                   <CardHeader className="pb-3">
-                    <CardTitle className="text-base flex items-center gap-2">
-                      <User className="h-4 w-4" />
-                      Thông tin khách hàng
-                    </CardTitle>
+                    <CardTitle className="text-base flex items-center gap-2">Thông tin khách hàng</CardTitle>
                   </CardHeader>
                   <CardContent className="space-y-2 text-sm">
-                    <div className="flex justify-between">
-                      <span className="text-muted-foreground">Tên:</span>
-                      <span className="font-medium">
-                        {selectedRefund.payment.booking.user.fullName || selectedRefund.payment.booking.user.username}
-                      </span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-muted-foreground">Email:</span>
-                      <span>{selectedRefund.payment.booking.user.email || "N/A"}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-muted-foreground">Mã đặt vé:</span>
-                      <span className="font-medium">{selectedRefund.payment.booking.bookingCode}</span>
-                    </div>
+                    <div className="flex justify-between"><span className="text-muted-foreground">Tên:</span><span className="font-medium">{selectedRefund.customerName}</span></div>
+                    <div className="flex justify-between"><span className="text-muted-foreground">Email:</span><span>{selectedRefund.customerEmail}</span></div>
+                    <div className="flex justify-between"><span className="text-muted-foreground">SĐT:</span><span>{selectedRefund.customerPhone}</span></div>
+                    <div className="flex justify-between"><span className="text-muted-foreground">Mã đặt vé:</span><span>{selectedRefund.bookingCode}</span></div>
+                    <div className="flex justify-between"><span className="text-muted-foreground">Trạng thái đặt vé:</span><span>{getBookingStatusLabel(selectedRefund.bookingStatus)}</span></div>
                   </CardContent>
                 </Card>
-
                 <Card>
                   <CardHeader className="pb-3">
-                    <CardTitle className="text-base flex items-center gap-2">
-                      <Calendar className="h-4 w-4" />
-                      Thông tin chuyến đi
-                    </CardTitle>
+                    <CardTitle className="text-base flex items-center gap-2">Thông tin chuyến đi</CardTitle>
                   </CardHeader>
                   <CardContent className="space-y-2 text-sm">
-                    <div className="flex justify-between">
-                      <span className="text-muted-foreground">Mã chuyến:</span>
-                      <span className="font-medium">{selectedRefund.payment.booking.tripDto.tripCode}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-muted-foreground">Tuyến:</span>
-                      <span>{selectedRefund.payment.booking.tripDto.route.routeName}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-muted-foreground">Khởi hành:</span>
-                      <span>
-                        {parseApiDate(selectedRefund.payment.booking.tripDto.departureTime)?.toLocaleString("vi-VN") ||
-                          "N/A"}
-                      </span>
-                    </div>
+                    <div className="flex justify-between"><span className="text-muted-foreground">Mã chuyến:</span><span className="font-medium">{selectedRefund.tripCode}</span></div>
+                    <div className="flex justify-between"><span className="text-muted-foreground">Tuyến:</span><span>{selectedRefund.routeName}</span></div>
+                    <div className="flex justify-between"><span className="text-muted-foreground">Khởi hành:</span><span>{parseApiDate(selectedRefund.departureTime)?.toLocaleString("vi-VN") || "N/A"}</span></div>
+                    <div className="flex justify-between"><span className="text-muted-foreground">Ga đi:</span><span>{selectedRefund.originStationName}</span></div>
+                    <div className="flex justify-between"><span className="text-muted-foreground">Ga đến:</span><span>{selectedRefund.destinationStationName}</span></div>
                   </CardContent>
                 </Card>
               </div>
-
-              {/* Payment & Refund Info */}
               <div className="grid grid-cols-2 gap-6">
                 <Card>
                   <CardHeader className="pb-3">
-                    <CardTitle className="text-base flex items-center gap-2">
-                      <CreditCard className="h-4 w-4" />
-                      Thông tin thanh toán
-                    </CardTitle>
+                    <CardTitle className="text-base flex items-center gap-2">Thông tin thanh toán</CardTitle>
                   </CardHeader>
                   <CardContent className="space-y-2 text-sm">
-                    <div className="flex justify-between">
-                      <span className="text-muted-foreground">Mã giao dịch:</span>
-                      <span className="font-medium">{selectedRefund.payment.transactionId}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-muted-foreground">Phương thức:</span>
-                      <span>{getPaymentMethodLabel(selectedRefund.payment.paymentMethod)}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-muted-foreground">Số tiền gốc:</span>
-                      <span className="font-medium">{formatPrice(selectedRefund.payment.paymentAmount)}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-muted-foreground">Ngày thanh toán:</span>
-                      {(() => {
-                        const paymentDate: string | null = typeof selectedRefund.payment.paymentDate === 'string' ? selectedRefund.payment.paymentDate : null;
-                        return (
-                          <span>
-                            {parseApiDate(paymentDate)?.toLocaleDateString("vi-VN") || "N/A"}
-                          </span>
-                        );
-                      })()}
-                    </div>
+                    <div className="flex justify-between"><span className="text-muted-foreground">Mã thanh toán:</span><span>{selectedRefund.paymentId}</span></div>
+                    <div className="flex justify-between"><span className="text-muted-foreground">Số tiền gốc:</span><span>{formatPrice(selectedRefund.originalAmount)}</span></div>
+                    <div className="flex justify-between"><span className="text-muted-foreground">Giảm giá:</span><span>{formatPrice(selectedRefund.discountAmount)}</span></div>
+                    <div className="flex justify-between"><span className="text-muted-foreground">Thành tiền:</span><span>{formatPrice(selectedRefund.netAmount)}</span></div>
+                    <div className="flex justify-between"><span className="text-muted-foreground">Số tiền thanh toán:</span><span>{formatPrice(selectedRefund.paymentAmount)}</span></div>
+                    <div className="flex justify-between"><span className="text-muted-foreground">Phương thức:</span><span>{getPaymentMethodLabel(selectedRefund.paymentMethod)}</span></div>
+                    <div className="flex justify-between"><span className="text-muted-foreground">Trạng thái thanh toán:</span><span>{getPaymentStatusLabel(selectedRefund.paymentStatus)}</span></div>
                   </CardContent>
                 </Card>
-
                 <Card>
                   <CardHeader className="pb-3">
-                    <CardTitle className="text-base flex items-center gap-2">
-                      <RefreshCw className="h-4 w-4" />
-                      Thông tin hoàn tiền
-                    </CardTitle>
+                    <CardTitle className="text-base flex items-center gap-2">Thông tin hoàn tiền</CardTitle>
                   </CardHeader>
                   <CardContent className="space-y-2 text-sm">
-                    <div className="flex justify-between">
-                      <span className="text-muted-foreground">Số tiền hoàn:</span>
-                      <span className="font-medium text-red-600">{formatPrice(selectedRefund.refundAmount)}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-muted-foreground">Trạng thái:</span>
-                      <span>{getStatusBadge(selectedRefund.status)}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-muted-foreground">Ngày yêu cầu:</span>
-                      <span>{parseApiDate(selectedRefund.requestedAt)?.toLocaleDateString("vi-VN") || "N/A"}</span>
-                    </div>
-                    {selectedRefund.processedAt && (
-                      <div className="flex justify-between">
-                        <span className="text-muted-foreground">Ngày xử lý:</span>
-                        <span>{parseApiDate(selectedRefund.processedAt)?.toLocaleDateString("vi-VN") || "N/A"}</span>
-                      </div>
+                    <div className="flex justify-between"><span className="text-muted-foreground">Chính sách hoàn:</span><span>{selectedRefund.policyName} ({selectedRefund.policyRefundPercent}%)</span></div>
+                    <div className="flex justify-between"><span className="text-muted-foreground">Số tiền hoàn:</span><span className="font-medium text-red-600">{formatPrice(selectedRefund.refundAmount)}</span></div>
+                    <div className="flex justify-between"><span className="text-muted-foreground">Phần trăm hoàn:</span><span>{selectedRefund.refundPercentage}%</span></div>
+                    <div className="flex justify-between"><span className="text-muted-foreground">Số giờ trước khởi hành:</span><span>{selectedRefund.hoursBeforeDeparture}</span></div>
+                    <div className="flex justify-between"><span className="text-muted-foreground">Trạng thái hoàn tiền:</span><span>{getStatusBadge(selectedRefund.status)}</span></div>
+                    <div className="flex justify-between"><span className="text-muted-foreground">Ngày yêu cầu:</span><span>{parseApiDate(selectedRefund.requestDate)?.toLocaleDateString("vi-VN") || "N/A"}</span></div>
+                    {selectedRefund.processedDate && (
+                      <div className="flex justify-between"><span className="text-muted-foreground">Ngày xử lý:</span><span>{parseApiDate(selectedRefund.processedDate)?.toLocaleDateString("vi-VN") || "N/A"}</span></div>
+                    )}
+                    {selectedRefund.adminNote && (
+                      <div className="flex justify-between"><span className="text-muted-foreground">Ghi chú:</span><span>{selectedRefund.adminNote}</span></div>
+                    )}
+                    {selectedRefund.rejectionReason && (
+                      <div className="flex justify-between"><span className="text-muted-foreground">Lý do từ chối:</span><span>{selectedRefund.rejectionReason}</span></div>
                     )}
                   </CardContent>
                 </Card>
               </div>
-
-              {/* Refund Reason */}
-              {selectedRefund.refundReason && (
+              <div className="grid grid-cols-2 gap-6">
                 <Card>
                   <CardHeader className="pb-3">
-                    <CardTitle className="text-base flex items-center gap-2">
-                      <AlertTriangle className="h-4 w-4" />
-                      Lý do hoàn tiền
-                    </CardTitle>
+                    <CardTitle className="text-base flex items-center gap-2">Thông tin hệ thống</CardTitle>
                   </CardHeader>
-                  <CardContent>
-                    <p className="text-sm">{selectedRefund.refundReason}</p>
+                  <CardContent className="space-y-2 text-sm">
+                    <div className="flex justify-between"><span className="text-muted-foreground">Ngày tạo:</span><span>{parseApiDate(selectedRefund.createdAt)?.toLocaleDateString("vi-VN") || "N/A"}</span></div>
+                    <div className="flex justify-between"><span className="text-muted-foreground">Ngày cập nhật:</span><span>{parseApiDate(selectedRefund.updatedAt)?.toLocaleDateString("vi-VN") || "N/A"}</span></div>
                   </CardContent>
                 </Card>
-              )}
+              </div>
             </div>
           )}
         </DialogContent>
