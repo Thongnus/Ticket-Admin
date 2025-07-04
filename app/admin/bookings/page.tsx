@@ -426,10 +426,10 @@ export default function BookingsManagement() {
                       <span className="font-medium">Tổng tiền:</span>{" "}
                       {formatPrice(selectedBooking.totalAmount)}
                     </p>
-                    <p>
-                      <span className="font-medium">Trạng thái:</span>{" "}
+                    <div>
+                      <span className="font-medium">Trạng thái:</span>{' '}
                       {getPaymentStatusBadge(selectedBooking.paymentStatus)}
-                    </p>
+                    </div>
                     <p>
                       <span className="font-medium">Ngày thanh toán:</span>{" "}
                       {parseApiDate(selectedBooking.paymentDate)?.toLocaleString("vi-VN") || "N/A"}
@@ -451,10 +451,10 @@ export default function BookingsManagement() {
                       <span className="font-medium">Ngày đặt:</span>{" "}
                       {parseApiDate(selectedBooking.bookingDate)?.toLocaleString("vi-VN") || "N/A"}
                     </p>
-                    <p>
-                      <span className="font-medium">Trạng thái:</span>{" "}
+                    <div>
+                      <span className="font-medium">Trạng thái:</span>{' '}
                       {getBookingStatusBadge(selectedBooking.bookingStatus)}
-                    </p>
+                    </div>
                   </div>
                 </div>
               </div>

@@ -2,17 +2,31 @@ import { fetchWithAuth } from "@/app/admin/page";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080/api";
 
-export async function getRefundRequests(page = 0, size = 10) {
-  const res = await fetchWithAuth(`/refunds/requests?page=${page}&size=${size}`, {
+export async function getRefundRequests(
+  page = 0,
+  size = 5,
+  status?: string,
+  search?: string,
+  fromDate?: string,
+  toDate?: string
+) {
+  let url = `/refunds/requests?page=${page}&size=${size}`;
+  if (status) url += `&status=${status}`;
+  if (search) url += `&search=${encodeURIComponent(search)}`;
+  if (fromDate) url += `&fromDate=${encodeURIComponent(fromDate)}`;
+  if (toDate) url += `&toDate=${encodeURIComponent(toDate)}`;
+
+  const res = await fetchWithAuth(url, {
     method: "GET",
-    headers: {
-      "Content-Type": "application/json",
-    },
+    headers: { "Content-Type": "application/json" },
   });
+
   if (!res.ok) throw new Error("Không thể lấy danh sách yêu cầu hoàn tiền");
+
   const data = await res.json();
   return data.data;
 }
+
 
 export async function getRefundRequestById(refundRequestId: number) {
   const res = await fetchWithAuth(`/refunds/${refundRequestId}`, {
@@ -48,4 +62,15 @@ export async function rejectRefundRequest(refundRequestId: number, reason: strin
   });
   if (!res.ok) throw new Error("Không thể từ chối yêu cầu hoàn tiền");
   return res.json();
+}
+
+export async function getRefundStatistics() {
+  const res = await fetchWithAuth(`/refunds/statistics`, {
+    method: "GET",
+    headers: { "Content-Type": "application/json" },
+  });
+  if (!res.ok) throw new Error("Không thể lấy thống kê hoàn tiền");
+  const data = await res.json();
+
+  return data.data;
 } 

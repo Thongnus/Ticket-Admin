@@ -35,7 +35,7 @@ import {
   CreditCard,
 } from "lucide-react"
 import { useToast } from "@/components/ui/use-toast"
-import { getRefundRequests, getRefundRequestById, approveRefundRequest, rejectRefundRequest } from "@/lib/api/refunds"
+import { getRefundRequests, getRefundRequestById, approveRefundRequest, rejectRefundRequest, getRefundStatistics } from "@/lib/api/refunds"
 
 // Interfaces
 interface PaymentDto {
@@ -217,7 +217,6 @@ const FAKE_REFUND_HISTORY: RefundRequest[] = [
 export default function RefundsManagement() {
   const { toast } = useToast()
   const [refundRequests, setRefundRequests] = useState<RefundRequest[]>([])
-  const [refundHistory, setRefundHistory] = useState<RefundRequest[]>([])
   const [loading, setLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState("")
   const [statusFilter, setStatusFilter] = useState("all")
@@ -227,19 +226,49 @@ export default function RefundsManagement() {
   const [processAction, setProcessAction] = useState<"approve" | "reject">("approve")
   const [processReason, setProcessReason] = useState("")
   const [page, setPage] = useState(0)
-  const [size, setSize] = useState(10)
+  const [size, setSize] = useState(5)
   const [totalPages, setTotalPages] = useState(1)
   const [totalElements, setTotalElements] = useState(0)
+  const [statistics, setStatistics] = useState<{
+    totalRequests: number;
+    totalRefundAmount: number;
+    approvedCount: number;
+    rejectedCount: number;
+    pendingCount: number;
+  } | null>(null)
+
+  const [historyRequests, setHistoryRequests] = useState<RefundRequest[]>([])
+  const [historyPage, setHistoryPage] = useState(0)
+  const [historySize, setHistorySize] = useState(10)
+  const [historyTotalPages, setHistoryTotalPages] = useState(1)
+  const [historyTotalElements, setHistoryTotalElements] = useState(0)
+
+  const [tab, setTab] = useState("requests")
 
   const refundStatusOptions = [
     { value: "pending", label: "Chờ duyệt", color: "bg-yellow-100 text-yellow-800" },
     { value: "approved", label: "Đã duyệt", color: "bg-blue-100 text-blue-800" },
-    { value: "reject", label: "Từ chối", color: "bg-red-100 text-red-800" },
+    { value: "rejected", label: "Từ chối", color: "bg-red-100 text-red-800" },
+    { value: "rejected", label: "Từ chối", color: "bg-red-100 text-red-800" },
     { value: "refund_requested", label: "Chờ duyệt", color: "bg-yellow-100 text-yellow-800" },
-    { value: "refund_pending", label: "Chờ hoàn tiền", color: "bg-yellow-100 text-yellow-800" },
-    { value: "refunded", label: "Đã hoàn tiền", color: "bg-green-100 text-green-800" },
+    { value: "refund_pending", label: "Chờ duyệt", color: "bg-yellow-100 text-yellow-800" },
+    { value: "refunded", label: "Đã duyệt", color: "bg-green-100 text-green-800" },
     { value: "refund_rejected", label: "Từ chối", color: "bg-red-100 text-red-800" },
   ]
+
+  const refundStatusFilterOptions = [
+    { value: "all", label: "Tất cả trạng thái" },
+    { value: "pending", label: "Chờ duyệt" },
+    { value: "approved", label: "Đã duyệt" },
+    { value: "rejected", label: "Từ chối" },
+  ]
+
+  const statusFilterMap: Record<string, string[]> = {
+    all: [],
+    pending: ["pending", "refund_requested", "refund_pending"],
+    approved: ["approved", "refunded"],
+    rejected: ["rejected", "refund_rejected"],
+  }
 
   const paymentMethods = [
     { value: "credit_card", label: "Thẻ tín dụng" },
@@ -251,7 +280,9 @@ export default function RefundsManagement() {
   // Fetch data
   useEffect(() => {
     setLoading(true)
-    getRefundRequests(page, size)
+    const statusValues = statusFilterMap[statusFilter] || []
+    const statusParam = statusFilter === "all" ? undefined : statusValues[0]
+    getRefundRequests(page, size, statusParam, searchTerm)
       .then((data) => {
         setRefundRequests(data.content || [])
         setTotalPages(data.totalPages || 1)
@@ -266,19 +297,20 @@ export default function RefundsManagement() {
         })
       })
       .finally(() => setLoading(false))
-    setRefundHistory(FAKE_REFUND_HISTORY)
-  }, [toast, page, size])
+  }, [toast, page, size, statusFilter, searchTerm])
 
-  // Filter refunds
-  const filteredRequests = refundRequests.filter((refund) => {
-    const matchesSearch =
-      refund.bookingCode?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      refund.customerName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      refund.customerEmail?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      refund.paymentId?.toString().includes(searchTerm)
-    const matchesStatus = statusFilter === "all" || refund.status?.toLowerCase() === statusFilter
-    return matchesSearch && matchesStatus
-  })
+  useEffect(() => {
+    getRefundStatistics()
+      .then((data) => {
+        console.log("getRefundStatistics data", data);
+        setStatistics(data);
+      })
+      .catch((err) => {
+      
+        console.error("getRefundStatistics error", err);
+        setStatistics(null);
+      });
+  }, []);
 
   // Format price
   const formatPrice = (price: number) => {
@@ -377,13 +409,22 @@ export default function RefundsManagement() {
   };
 
   // Calculate refund statistics
-  const stats = {
-    total: refundRequests.length,
-    pending: refundRequests.filter((r) => r.status === "refund_requested" || r.status === "refund_pending").length,
-    approved: refundRequests.filter((r) => r.status === "refunded").length,
-    rejected: refundRequests.filter((r) => r.status === "refund_rejected").length,
-    totalAmount: refundRequests.reduce((sum, r) => sum + r.refundAmount, 0),
-  }
+  const stats = statistics
+    ? {
+        total: statistics.totalRequests,
+        pending: statistics.pendingCount,
+        approved: statistics.approvedCount,
+        rejected: statistics.rejectedCount,
+        totalAmount: statistics.totalRefundAmount,
+      }
+    : {
+        total: refundRequests.length,
+        pending: refundRequests.filter((r) => ["pending", "refund_requested", "refund_pending"].includes(r.status)).length,
+        approved: refundRequests.filter((r) => ["approved", "refunded"].includes(r.status)).length,
+        rejected: refundRequests.filter((r) => ["rejected", "refund_rejected"].includes(r.status)).length,
+        totalAmount: refundRequests.reduce((sum, r) => sum + r.refundAmount, 0),
+      }
+
 
   // Thêm hàm alias trạng thái tiếng Việt
   const getStatusLabel = (status: string) => {
@@ -393,6 +434,7 @@ export default function RefundsManagement() {
       case 'approved':
         return 'Đã duyệt';
       case 'reject':
+      case 'rejected':
         return 'Từ chối';
       default:
         return status;
@@ -435,6 +477,46 @@ export default function RefundsManagement() {
         return status;
     }
   };
+
+  // Gọi API khi đổi tab sang history hoặc đổi page/size
+  useEffect(() => {
+    if (tab === "history") {
+      setLoading(true);
+      getRefundRequests(historyPage, historySize, "approved")
+        .then((data) => {
+          setHistoryRequests(data.content || []);
+          setHistoryTotalPages(data.totalPages || 1);
+          setHistoryTotalElements(data.totalElements || 0);
+        })
+        .catch(() => setHistoryRequests([]))
+        .finally(() => setLoading(false));
+    }
+  }, [tab, historyPage, historySize]);
+
+  // Thay đổi: Khi đổi statusFilter hoặc searchTerm, reset page về 0
+  const handleStatusFilterChange = (value: string) => {
+    setStatusFilter(value);
+    setPage(0);
+  };
+  const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setSearchTerm(e.target.value);
+    setPage(0);
+  };
+
+  // Hàm tạo dải số trang hiển thị
+  function getPageNumbers(current: number, total: number, delta = 2) {
+    const range = [];
+    for (let i = Math.max(0, current - delta); i <= Math.min(total - 1, current + delta); i++) {
+      range.push(i);
+    }
+    return range;
+  }
+
+  // Trong phân trang tab Yêu cầu hoàn tiền
+  const pageNumbers = getPageNumbers(page, totalPages, 2);
+
+  // Trong phân trang tab Lịch sử hoàn tiền
+  const historyPageNumbers = getPageNumbers(historyPage, historyTotalPages, 2);
 
   return (
     <div className="flex flex-1 flex-col gap-6">
@@ -500,7 +582,7 @@ export default function RefundsManagement() {
       </div>
 
       {/* Main Content */}
-      <Tabs defaultValue="requests" className="space-y-4">
+      <Tabs value={tab} onValueChange={setTab} defaultValue="requests" className="space-y-4">
         <TabsList>
           <TabsTrigger value="requests">Yêu cầu hoàn tiền</TabsTrigger>
           <TabsTrigger value="history">Lịch sử hoàn tiền</TabsTrigger>
@@ -510,7 +592,7 @@ export default function RefundsManagement() {
           <Card>
             <CardHeader>
               <CardTitle>Danh sách yêu cầu hoàn tiền</CardTitle>
-              <CardDescription>Tổng cộng {filteredRequests.length} yêu cầu hoàn tiền</CardDescription>
+              <CardDescription>Tổng cộng {refundRequests.length} yêu cầu hoàn tiền</CardDescription>
 
               {/* Filters */}
               <div className="flex items-center space-x-4">
@@ -519,18 +601,17 @@ export default function RefundsManagement() {
                   <Input
                     placeholder="Tìm kiếm theo mã đặt vé, mã giao dịch, tên khách hàng..."
                     value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
+                    onChange={handleSearchChange}
                     className="max-w-sm"
                   />
                 </div>
 
-                <Select value={statusFilter} onValueChange={setStatusFilter}>
+                <Select value={statusFilter} onValueChange={handleStatusFilterChange}>
                   <SelectTrigger className="w-[180px]">
                     <SelectValue placeholder="Trạng thái" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="all">Tất cả trạng thái</SelectItem>
-                    {refundStatusOptions.map((status) => (
+                    {refundStatusFilterOptions.map((status) => (
                       <SelectItem key={status.value} value={status.value}>
                         {status.label}
                       </SelectItem>
@@ -545,7 +626,7 @@ export default function RefundsManagement() {
                 <div className="flex items-center justify-center py-8">
                   <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-green-600"></div>
                 </div>
-              ) : filteredRequests.length === 0 ? (
+              ) : refundRequests.length === 0 ? (
                 <div className="text-center py-8 text-muted-foreground">Không tìm thấy yêu cầu hoàn tiền nào.</div>
               ) : (
                 <Table>
@@ -562,7 +643,7 @@ export default function RefundsManagement() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {filteredRequests.map((refund) => (
+                    {refundRequests.map((refund) => (
                       <TableRow key={refund.refundRequestId}>
                         <TableCell className="font-medium">{refund.bookingCode}</TableCell>
                         <TableCell>
@@ -582,7 +663,7 @@ export default function RefundsManagement() {
                         <TableCell className="font-medium text-red-600">{formatPrice(refund.refundAmount)}</TableCell>
                         <TableCell>{getPaymentMethodLabel(refund.paymentMethod)}</TableCell>
                         <TableCell>{getStatusBadge(refund.status)}</TableCell>
-                        <TableCell>{parseApiDate(refund.requestDate)?.toLocaleDateString("vi-VN") || "N/A"}</TableCell>
+                        <TableCell>{parseApiDate(refund.requestDate)?.toLocaleString("vi-VN") || "N/A"}</TableCell>
                         <TableCell className="text-right">
                           <DropdownMenu>
                             <DropdownMenuTrigger asChild>
@@ -637,21 +718,17 @@ export default function RefundsManagement() {
               <Button variant="outline" size="sm" disabled={page === 0} onClick={() => setPage(page - 1)}>
                 Trước
               </Button>
-              <span>
-                <Input
-                  type="number"
-                  min={1}
-                  max={totalPages}
-                  value={page + 1}
-                  onChange={e => {
-                    let val = Number(e.target.value)
-                    if (isNaN(val) || val < 1) val = 1
-                    if (val > totalPages) val = totalPages
-                    setPage(val - 1)
-                  }}
-                  className="w-14 h-8 px-2 text-center"
-                />
-              </span>
+              {pageNumbers.map((p) => (
+                <Button
+                  key={p}
+                  variant={p === page ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => setPage(p)}
+                  disabled={p === page}
+                >
+                  {p + 1}
+                </Button>
+              ))}
               <Button variant="outline" size="sm" disabled={page + 1 >= totalPages} onClick={() => setPage(page + 1)}>
                 Sau
               </Button>
@@ -669,7 +746,7 @@ export default function RefundsManagement() {
               <CardDescription>Các yêu cầu hoàn tiền đã được xử lý</CardDescription>
             </CardHeader>
             <CardContent>
-              {refundHistory.length === 0 ? (
+              {historyRequests.length === 0 ? (
                 <div className="text-center py-8 text-muted-foreground">Chưa có lịch sử hoàn tiền nào.</div>
               ) : (
                 <Table>
@@ -680,11 +757,11 @@ export default function RefundsManagement() {
                       <TableHead>Số tiền hoàn</TableHead>
                       <TableHead>Trạng thái</TableHead>
                       <TableHead>Ngày xử lý</TableHead>
-                      <TableHead>Người xử lý</TableHead>
+                      <TableHead>Nội dung phê duyệt</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {refundHistory.map((refund) => (
+                    {historyRequests.map((refund) => (
                       <TableRow key={refund.paymentId}>
                         <TableCell className="font-medium">{refund.bookingCode}</TableCell>
                         <TableCell>
@@ -692,8 +769,8 @@ export default function RefundsManagement() {
                         </TableCell>
                         <TableCell className="font-medium">{formatPrice(refund.refundAmount)}</TableCell>
                         <TableCell>{getStatusBadge(refund.status)}</TableCell>
-                        <TableCell>{parseApiDate(refund.processedDate)?.toLocaleDateString("vi-VN") || "N/A"}</TableCell>
-                        <TableCell>{refund.adminNote || "N/A"}</TableCell>
+                        <TableCell>{parseApiDate(refund.processedDate)?.toLocaleString("vi-VN") || "N/A"}</TableCell>
+                        <TableCell>{refund.adminNote || refund.rejectionReason || "N/A"}</TableCell>
                       </TableRow>
                     ))}
                   </TableBody>
@@ -701,6 +778,38 @@ export default function RefundsManagement() {
               )}
             </CardContent>
           </Card>
+
+          {/* Pagination */}
+          <div className="flex flex-wrap justify-between items-center mt-4 gap-2">
+            <div>
+              Trang <b>{historyPage + 1}</b> / <b>{historyTotalPages}</b> ({historyTotalElements} yêu cầu)
+            </div>
+            <div className="flex items-center gap-2">
+              <Button variant="outline" size="sm" disabled={historyPage === 0} onClick={() => setHistoryPage(0)}>
+                Đầu
+              </Button>
+              <Button variant="outline" size="sm" disabled={historyPage === 0} onClick={() => setHistoryPage(historyPage - 1)}>
+                Trước
+              </Button>
+              {historyPageNumbers.map((p) => (
+                <Button
+                  key={p}
+                  variant={p === historyPage ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => setHistoryPage(p)}
+                  disabled={p === historyPage}
+                >
+                  {p + 1}
+                </Button>
+              ))}
+              <Button variant="outline" size="sm" disabled={historyPage + 1 >= historyTotalPages} onClick={() => setHistoryPage(historyPage + 1)}>
+                Sau
+              </Button>
+              <Button variant="outline" size="sm" disabled={historyPage + 1 >= historyTotalPages} onClick={() => setHistoryPage(historyTotalPages - 1)}>
+                Cuối
+              </Button>
+            </div>
+          </div>
         </TabsContent>
       </Tabs>
 
