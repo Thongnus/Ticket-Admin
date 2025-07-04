@@ -351,6 +351,7 @@ export default function RefundsManagement() {
       } else {
         await rejectRefundRequest(selectedRefund.refundRequestId, processReason);
       }
+      setIsProcessDialogOpen(false);
       // Lấy lại chi tiết mới nhất
       const updatedDetail = await getRefundRequestById(selectedRefund.refundRequestId);
       setSelectedRefund(updatedDetail);
@@ -366,7 +367,6 @@ export default function RefundsManagement() {
           : "Yêu cầu hoàn tiền đã bị từ chối.",
         "success"
       );
-      setIsProcessDialogOpen(false);
     } catch (error: any) {
       showCustomToast(
         "❌ Lỗi",

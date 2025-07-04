@@ -54,6 +54,10 @@ interface Booking {
   user: UserDto
   tripDto: TripDto
   ticketCount?: number | null
+  passengerTicketDtos?: {
+    passengerName: string
+    identityCard: string
+  }[]
 }
 
 export default function BookingsManagement() {
@@ -70,14 +74,21 @@ export default function BookingsManagement() {
   const paymentStatusOptions = [
     { value: "pending", label: "Chờ thanh toán", color: "bg-yellow-100 text-yellow-800" },
     { value: "paid", label: "Đã thanh toán", color: "bg-green-100 text-green-800" },
+    { value: "refunded", label: "Đã hoàn tiền", color: "bg-blue-100 text-blue-800" },
     { value: "cancelled", label: "Đã hủy", color: "bg-red-100 text-red-800" },
+    { value: "refund_pending", label: "Chờ hoàn tiền", color: "bg-orange-100 text-orange-800" },
+    { value: "refund_failed", label: "Hoàn tiền thất bại", color: "bg-gray-100 text-gray-800" },
   ]
 
   const bookingStatusOptions = [
     { value: "pending", label: "Chờ xử lý", color: "bg-yellow-100 text-yellow-800" },
     { value: "confirmed", label: "Đã xác nhận", color: "bg-green-100 text-green-800" },
+    { value: "pending_cancel", label: "Đang chờ hủy", color: "bg-purple-100 text-purple-800" },
     { value: "cancelled", label: "Đã hủy", color: "bg-red-100 text-red-800" },
+    { value: "refund_processing", label: "Đang hoàn tiền", color: "bg-orange-100 text-orange-800" },
+    { value: "refund_failed", label: "Hoàn tiền không thành công", color: "bg-gray-100 text-gray-800" },
     { value: "completed", label: "Hoàn thành", color: "bg-blue-100 text-blue-800" },
+    { value: "refunded", label: "Đã hoàn tiền", color: "bg-blue-100 text-blue-800" },
   ]
 
   const paymentMethods = [
@@ -119,7 +130,10 @@ export default function BookingsManagement() {
     const matchesSearch =
       booking.bookingCode.toLowerCase().includes(searchTerm.toLowerCase()) ||
       booking.user?.fullName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      booking.contactEmail?.toLowerCase().includes(searchTerm.toLowerCase())
+      booking.contactEmail?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (booking.passengerTicketDtos || []).some(p =>
+        p.identityCard?.toLowerCase().includes(searchTerm.toLowerCase())
+      )
     const matchesStatus = statusFilter === "all" || booking.bookingStatus.toLowerCase() === statusFilter
     const matchesPayment = paymentFilter === "all" || booking.paymentStatus.toLowerCase() === paymentFilter
     return matchesSearch && matchesStatus && matchesPayment
@@ -264,6 +278,7 @@ export default function BookingsManagement() {
                 <TableRow>
                   <TableHead>Mã đặt vé</TableHead>
                   <TableHead>Khách hàng</TableHead>
+                  <TableHead>Hành khách/CMND</TableHead>
                   <TableHead>Chuyến tàu</TableHead>
                   <TableHead>Số vé</TableHead>
                   <TableHead>Tổng tiền</TableHead>
@@ -283,6 +298,20 @@ export default function BookingsManagement() {
                         <div className="text-sm text-muted-foreground">{booking.contactEmail || booking.user?.email || null }</div>
                         <div className="text-sm text-muted-foreground">{booking.contactPhone || null }</div>
                       </div>
+                    </TableCell>
+                    <TableCell>
+                      {booking.passengerTicketDtos && booking.passengerTicketDtos.length > 0 ? (
+                        <div className="space-y-1">
+                          {booking.passengerTicketDtos.map((p, idx) => (
+                            <div key={idx}>
+                              <span className="font-medium">{p.passengerName}</span>
+                              <span className="ml-2 text-xs text-muted-foreground">({p.identityCard})</span>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <span className="text-muted-foreground">N/A</span>
+                      )}
                     </TableCell>
                     <TableCell>
                       <div>

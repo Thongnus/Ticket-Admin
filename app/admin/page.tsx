@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { BarChart3, Users, Train, Ticket, AlertTriangle, CheckCircle, Clock, DollarSign, MapPin, Activity, AlertCircle, Settings, User } from "lucide-react"
 import Link from "next/link"
-import { useWebSocket } from "@/hooks/useWebSocket"
+// import { useWebSocket } from "@/hooks/useWebSocket"
 import { formatDistanceToNow } from "date-fns"
 import { vi } from "date-fns/locale"
 
@@ -95,7 +95,7 @@ export default function AdminPage() {
     revenueGrowthPercentage: 0,
     ticketGrowthPercentage: 0,
   })
-  const { logs, isConnected, lastError } = useWebSocket()
+  // const { logs, isConnected, lastError } = useWebSocket()
 
   useEffect(() => {
     const fetchStats = async () => {
@@ -326,7 +326,7 @@ export default function AdminPage() {
           <CardHeader>
             <CardTitle>Hoạt động gần đây</CardTitle>
             <CardDescription>
-              {isConnected ? (
+              {/* {isConnected ? (
                 <span className="flex items-center text-green-500">
                   <CheckCircle className="mr-2 h-4 w-4" />
                   Đang kết nối
@@ -336,11 +336,15 @@ export default function AdminPage() {
                   <Clock className="mr-2 h-4 w-4" />
                   Đang kết nối lại...
                 </span>
-              )}
+              )} */}
+              <span className="flex items-center text-gray-500">
+                <AlertTriangle className="mr-2 h-4 w-4" />
+                Tính năng tạm thời bị tắt
+              </span>
             </CardDescription>
           </CardHeader>
           <CardContent>
-            {lastError ? (
+            {/* {lastError ? (
               <div className="text-red-500">{lastError}</div>
             ) : (
               <div className="space-y-4">
@@ -366,7 +370,10 @@ export default function AdminPage() {
                   ))
                 )}
               </div>
-            )}
+            )} */}
+            <div className="text-center text-muted-foreground py-4">
+              Tính năng WebSocket đã tạm thời bị tắt do vấn đề thư viện
+            </div>
           </CardContent>
         </Card>
       </div>
