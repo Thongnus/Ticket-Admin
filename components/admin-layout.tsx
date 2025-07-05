@@ -33,6 +33,7 @@ import {
   MapPin,
   Sofa,
   Armchair,
+  Ticket,
 } from "lucide-react"
 
 interface AdminLayoutProps {
@@ -91,7 +92,13 @@ export function AdminLayout({ children }: AdminLayoutProps) {
       label: "Đặt vé",
       icon: BarChart,
       active: pathname === "/admin/bookings",
-    }, 
+    },
+    {
+      href: "/admin/tickets",
+      label: "Quản lý vé",
+      icon: Ticket,
+      active: pathname === "/admin/tickets",
+    },
     {
       href: "/admin/refunds",
       label: "Hoàn vé",

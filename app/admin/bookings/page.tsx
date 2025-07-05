@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useCallback } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
@@ -64,9 +64,9 @@ export default function BookingsManagement() {
   const { toast } = useToast()
   const [bookings, setBookings] = useState<Booking[]>([])
   const [loading, setLoading] = useState(true)
-  const [searchTerm, setSearchTerm] = useState("")
+  const [identityCardSearch, setIdentityCardSearch] = useState("")
+  const [debouncedIdentityCardSearch, setDebouncedIdentityCardSearch] = useState("")
   const [statusFilter, setStatusFilter] = useState("all")
-  const [paymentFilter, setPaymentFilter] = useState("all")
   const [selectedBooking, setSelectedBooking] = useState<Booking | null>(null)
   const [isDetailDialogOpen, setIsDetailDialogOpen] = useState(false)
   const baseUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080/api"
@@ -99,12 +99,31 @@ export default function BookingsManagement() {
     { value: "cash", label: "Tiền mặt" },
   ]
 
+  // Debounce identityCard search
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedIdentityCardSearch(identityCardSearch)
+    }, 500)
+
+    return () => clearTimeout(timer)
+  }, [identityCardSearch])
+
   // Lấy danh sách đặt vé
   useEffect(() => {
     const fetchBookings = async () => {
       try {
         setLoading(true)
-        const data = await getBookings()
+        const params: any = {}
+        
+        if (statusFilter !== "all") {
+          params.bookingStatus = statusFilter
+        }
+        
+        if (debouncedIdentityCardSearch.trim()) {
+          params.identityCard = debouncedIdentityCardSearch.trim()
+        }
+        
+        const data = await getBookings(params)
         if (!Array.isArray(data.content)) {
           throw new Error("Trường 'content' không phải mảng")
         }
@@ -123,21 +142,7 @@ export default function BookingsManagement() {
     }
 
     fetchBookings()
-  }, [toast])
-
-  // Lọc phía client
-  const filteredBookings = bookings.filter((booking: Booking) => {
-    const matchesSearch =
-      booking.bookingCode.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      booking.user?.fullName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      booking.contactEmail?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      (booking.passengerTicketDtos || []).some(p =>
-        p.identityCard?.toLowerCase().includes(searchTerm.toLowerCase())
-      )
-    const matchesStatus = statusFilter === "all" || booking.bookingStatus.toLowerCase() === statusFilter
-    const matchesPayment = paymentFilter === "all" || booking.paymentStatus.toLowerCase() === paymentFilter
-    return matchesSearch && matchesStatus && matchesPayment
-  })
+  }, [toast, statusFilter, debouncedIdentityCardSearch])
 
   // Định dạng giá tiền
   const formatPrice = (price: number) => {
@@ -224,14 +229,14 @@ export default function BookingsManagement() {
       <Card>
         <CardHeader>
           <CardTitle>Danh sách đặt vé</CardTitle>
-          <CardDescription>Tổng cộng {filteredBookings.length} đơn đặt vé</CardDescription>
+          <CardDescription>Tổng cộng {bookings.length} đơn đặt vé</CardDescription>
           <div className="flex items-center space-x-4">
             <div className="flex items-center space-x-2">
               <Search className="h-4 w-4 text-muted-foreground" />
               <Input
-                placeholder="Tìm kiếm theo mã đặt vé, tên khách hàng, email..."
-                value={searchTerm}
-                onChange={(e: { target: { value: any } }) => setSearchTerm(e.target.value)}
+                placeholder="Tìm kiếm theo CMND..."
+                value={identityCardSearch}
+                onChange={(e: { target: { value: any } }) => setIdentityCardSearch(e.target.value)}
                 className="max-w-sm"
               />
             </div>
@@ -248,19 +253,6 @@ export default function BookingsManagement() {
                 ))}
               </SelectContent>
             </Select>
-            <Select value={paymentFilter} onValueChange={setPaymentFilter}>
-              <SelectTrigger className="w-[180px]">
-                <SelectValue placeholder="Trạng thái thanh toán" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Tất cả thanh toán</SelectItem>
-                {paymentStatusOptions.map((status) => (
-                  <SelectItem key={status.value} value={status.value}>
-                    {status.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
           </div>
         </CardHeader>
         <CardContent>
@@ -268,7 +260,7 @@ export default function BookingsManagement() {
             <div className="flex items-center justify-center py-8">
               <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-green-600"></div>
             </div>
-          ) : filteredBookings.length === 0 ? (
+          ) : bookings.length === 0 ? (
             <div className="text-center py-8 text-muted-foreground">
               Không tìm thấy đơn đặt vé nào.
             </div>
@@ -282,14 +274,13 @@ export default function BookingsManagement() {
                   <TableHead>Chuyến tàu</TableHead>
                   <TableHead>Số vé</TableHead>
                   <TableHead>Tổng tiền</TableHead>
-                  <TableHead>Thanh toán</TableHead>
                   <TableHead>Trạng thái</TableHead>
                   <TableHead>Ngày đặt</TableHead>
                   <TableHead className="text-right">Thao tác</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {filteredBookings.map((booking: Booking) => (
+                {bookings.map((booking: Booking) => (
                   <TableRow key={booking.bookingId}>
                     <TableCell className="font-medium">{booking.bookingCode}</TableCell>
                     <TableCell>
@@ -321,7 +312,6 @@ export default function BookingsManagement() {
                     </TableCell>
                     <TableCell>{booking.ticketCount || "N/A"} vé</TableCell>
                     <TableCell>{formatPrice(booking.totalAmount)}</TableCell>
-                    <TableCell>{getPaymentStatusBadge(booking.paymentStatus)}</TableCell>
                     <TableCell>{getBookingStatusBadge(booking.bookingStatus)}</TableCell>
                     <TableCell>
                       {parseApiDate(booking.bookingDate)?.toLocaleDateString("vi-VN") || "N/A"}

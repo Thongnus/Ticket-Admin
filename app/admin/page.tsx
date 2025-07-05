@@ -227,7 +227,7 @@ export default function AdminPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Trang quản trị</h1>
-          <p className="text-muted-foreground">Chào mừng bạn đến với hệ thống quản lý VietRail</p>
+          <p className="text-muted-foreground">Chào mừng bạn đến với hệ thống quản lý Thông-Rail</p>
         </div>
         <div className="flex items-center space-x-2">
           <Badge variant="outline" className={stats.delayedTrips > 0 ? "text-yellow-600" : "text-green-600"}>

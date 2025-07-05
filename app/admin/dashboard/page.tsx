@@ -10,6 +10,7 @@ import { Separator } from "@/components/ui/separator"
 import { BarChart as LucideBarChart, PieChart, DollarSign, Ticket, AlertTriangle, Train } from "lucide-react"
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, AreaChart, Area } from "recharts"
 import { dashboardApi } from "@/lib/api/dashboard"
+import { mapSeatTypeDistribution } from "@/lib/constants/seat-types"
 
 const baseUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080/api"
 
@@ -38,10 +39,8 @@ const mockData = {
     { id: 5, name: "Sài Gòn - Đà Lạt", bookings: 200, revenue: 40000000 }
   ],
   ticketDistribution: [
-    { name: "Toa VIP", count: 150, percentage: 12 },
-    { name: "Toa 1", count: 450, percentage: 36 },
-    { name: "Toa 2", count: 380, percentage: 31 },
-    { name: "Toa 3", count: 254, percentage: 21 }
+    { name: "Ghế cứng", count: 43, percentage: 82.69 },
+    { name: "Giường cứng", count: 9, percentage: 17.31 }
   ],
   revenueAnalysis: {
     periods: ["T1", "T2", "T3", "T4", "T5", "T6"],
@@ -50,8 +49,8 @@ const mockData = {
     averageTicketPrice: [285000, 290000, 295000, 300000, 305000, 310000]
   },
   customerAnalysis: {
-    totalCustomers: 15678,
-    newCustomers: 234,
+    totalCustomers: 100,
+    newCustomers: 4,
     returningCustomers: 1234,
     customerSegments: [
       { segment: "Khách thường xuyên", count: 5678, percentage: 36 },
@@ -142,7 +141,7 @@ export default function AdminDashboard() {
           overview,
           dailyRevenue,
           popularRoutes,
-          ticketDistribution,
+          ticketDistribution: mapSeatTypeDistribution(ticketDistribution),
           revenueAnalysis
         })
       } catch (error) {
@@ -280,7 +279,7 @@ export default function AdminDashboard() {
             </Card>
             <Card>
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">Chuyến tàu hoạt động</CardTitle>
+                <CardTitle className="text-sm font-medium">Chuyến tàu hoàn thành</CardTitle>
                 <Train className="h-4 w-4 text-muted-foreground" />
               </CardHeader>
               <CardContent>
