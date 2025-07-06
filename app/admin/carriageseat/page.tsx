@@ -242,6 +242,45 @@ export default function TrainCarriageSeatManagement() {
     }
   }, [refreshCarriages])
 
+  // Khi đóng popup xem ghế, fetch lại toàn bộ danh sách toa và ghế
+  useEffect(() => {
+    if (!isSeatsViewOpen) {
+      setLoadingCarriages(true)
+      carriageSeatApi.getAllCarriagesWithSeats()
+        .then((data) => {
+          setCarriages(
+            data.map((item) => ({
+              carriage_id: item.carriage.carriageId,
+              train_id: item.carriage.trainId || 0,
+              carriage_number: item.carriage.carriageNumber,
+              carriage_type: item.carriage.carriageType as Carriage["carriage_type"],
+              capacity: item.carriage.capacity,
+              status: item.carriage.status as Carriage["status"],
+              created_at: item.carriage.createdAt || "",
+              updated_at: item.carriage.updatedAt || "",
+            }))
+          )
+          setSeats(
+            data.flatMap((item) =>
+              item.seats.map((seat) => ({
+                seat_id: seat.seatId,
+                carriage_id: item.carriage.carriageId,
+                seat_number: seat.seatNumber,
+                seat_type: seat.seatType as Seat["seat_type"],
+                status: seat.status as Seat["status"],
+                created_at: seat.createdAt,
+                updated_at: seat.updatedAt,
+              }))
+            )
+          )
+        })
+        .catch((error) => {
+          toast({ title: "Lỗi", description: error.message || "Không thể tải danh sách toa tàu." })
+        })
+        .finally(() => setLoadingCarriages(false))
+    }
+  }, [isSeatsViewOpen])
+
   // View seats for a specific carriage
   const handleViewSeats = async (carriage: Carriage) => {
     setSelectedCarriage(carriage)
