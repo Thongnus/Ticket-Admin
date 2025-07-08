@@ -1,7 +1,7 @@
 "use client"
 
 import type React from "react"
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
@@ -21,7 +21,7 @@ import {
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { Edit, MoreHorizontal, Plus, Search, Trash2, Clock, AlertTriangle, Loader2 } from "lucide-react"
 import { useToast } from "@/components/ui/use-toast"
-import { fetchTripsPaged, TripDto, createTrip, updateTrip, deleteTrip, getTrip, updateTripStatus, markTripDelayed, markTripCancelled } from "@/lib/api/trips"
+import { fetchTripsPaged, TripDto, createTrip, updateTrip, deleteTrip, getTrip, updateTripStatus, markTripDelayed, markTripCancelled, importTripsFromExcel } from "@/lib/api/trips"
 import { fetchActiveTrains, Train } from "@/lib/api/trains"
 import { fetchActiveRoutes, Route } from "@/lib/api/routes"
 
@@ -56,7 +56,7 @@ export default function TripsManagement() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [page, setPage] = useState(0)
-  const [size, setSize] = useState(5)
+  const [size, setSize] = useState(10)
   const [totalPages, setTotalPages] = useState(1)
   const [totalElements, setTotalElements] = useState(0)
   const [routes, setRoutes] = useState<Route[]>([])
@@ -86,6 +86,9 @@ export default function TripsManagement() {
     tripId: number | null;
     cancelReason: string;
   }>({ open: false, tripId: null, cancelReason: "" });
+  // Import Excel state
+  const [importing, setImporting] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   // Custom toast function
   const showCustomToast = (title: string, message: string, type: 'success' | 'error' | 'info' = 'info') => {
@@ -380,6 +383,30 @@ export default function TripsManagement() {
     return `${hours}h ${minutes}m`
   }
 
+  const handleImportExcel = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setImporting(true);
+    try {
+      const result = await importTripsFromExcel(file);
+      toast({
+        title: "Thành công",
+        description: result.sucess || "Import thành công.",
+      });
+      // Gọi lại fetchTripsPaged hoặc reload trang để cập nhật danh sách
+      window.location.reload();
+    } catch (err: any) {
+      toast({
+        title: "Lỗi",
+        description: err.message || "Import thất bại.",
+        variant: "destructive",
+      });
+    } finally {
+      setImporting(false);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
+  };
+
   return (
     <div className="flex flex-1 flex-col gap-4">
       <div className="flex items-center justify-between">
@@ -387,155 +414,170 @@ export default function TripsManagement() {
           <h2 className="text-3xl font-bold tracking-tight">Quản lý chuyến tàu</h2>
           <p className="text-muted-foreground">Quản lý lịch trình và trạng thái các chuyến tàu</p>
         </div>
-        <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-          <DialogTrigger asChild>
-            <Button
-              onClick={() => {
-                setEditingTrip(null)
-                setFormData({
-                  tripCode: "",
-                  routeName: "",
-                  trainNumber: "",
-                  departureTime: "",
-                  arrivalTime: "",
-                  status: "scheduled",
-                  delayMinutes: "0",
-                })
-              }}
-            >
-              <Plus className="mr-2 h-4 w-4" />
-              Thêm chuyến tàu
-            </Button>
-          </DialogTrigger>
-          <DialogContent className="sm:max-w-[500px]">
-            <DialogHeader>
-              <DialogTitle>{editingTrip ? "Chỉnh sửa chuyến tàu" : "Thêm chuyến tàu mới"}</DialogTitle>
-              <DialogDescription>
-                {editingTrip ? "Cập nhật thông tin chuyến tàu" : "Nhập thông tin chuyến tàu mới"}
-              </DialogDescription>
-            </DialogHeader>
-            <form onSubmit={handleSubmit}>
-              <div className="grid gap-4 py-4">
-                <div className="grid grid-cols-4 items-center gap-4">
-                  <Label htmlFor="tripCode" className="text-right">
-                    Mã chuyến
-                  </Label>
-                  <Input
-                    id="tripCode"
-                    value={formData.tripCode}
-                    onChange={(e) => setFormData({ ...formData, tripCode: e.target.value })}
-                    className="col-span-3"
-                    required
-                  />
-                </div>
-                <div className="grid grid-cols-4 items-center gap-4">
-                  <Label htmlFor="routeName" className="text-right">
-                    Tuyến đường
-                  </Label>
-                  <Select
-                    value={formData.routeName}
-                    onValueChange={(value) => setFormData({ ...formData, routeName: value })}
-                  >
-                    <SelectTrigger className="col-span-3">
-                      <SelectValue placeholder="Chọn tuyến đường" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {routes.map((route) => (
-                        <SelectItem key={route.routeId} value={route.routeName}>
-                          {route.routeName} ({route.originStationName} - {route.destinationStationName})
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="grid grid-cols-4 items-center gap-4">
-                  <Label htmlFor="trainNumber" className="text-right">
-                    Số tàu
-                  </Label>
-                  <Select
-                    value={formData.trainNumber}
-                    onValueChange={(value) => setFormData({ ...formData, trainNumber: value })}
-                  >
-                    <SelectTrigger className="col-span-3">
-                      <SelectValue placeholder="Chọn tàu" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {trains.map((train) => (
-                        <SelectItem key={train.id} value={train.trainNumber}>
-                          {train.trainNumber} - {train.trainName}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="grid grid-cols-4 items-center gap-4">
-                  <Label htmlFor="departureTime" className="text-right">
-                    Giờ khởi hành
-                  </Label>
-                  <Input
-                    id="departureTime"
-                    type="datetime-local"
-                    value={formData.departureTime}
-                    onChange={(e) => setFormData({ ...formData, departureTime: e.target.value })}
-                    className="col-span-3"
-                    required
-                  />
-                </div>
-                <div className="grid grid-cols-4 items-center gap-4">
-                  <Label htmlFor="arrivalTime" className="text-right">
-                    Giờ đến
-                  </Label>
-                  <Input
-                    id="arrivalTime"
-                    type="datetime-local"
-                    value={formData.arrivalTime}
-                    onChange={(e) => setFormData({ ...formData, arrivalTime: e.target.value })}
-                    className="col-span-3"
-                    required
-                  />
-                </div>
-                <div className="grid grid-cols-4 items-center gap-4">
-                  <Label htmlFor="status" className="text-right">
-                    Trạng thái
-                  </Label>
-                  <Select
-                    value={formData.status}
-                    onValueChange={(value) => setFormData({ ...formData, status: value })}
-                  >
-                    <SelectTrigger className="col-span-3">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {statusOptions.filter(s => s.value !== "all").map((status) => (
-                        <SelectItem key={status.value} value={status.value}>
-                          {status.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                {editingTrip && (
+        <div className="flex flex-row items-center gap-2 justify-end">
+          <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+            <DialogTrigger asChild>
+              <Button
+                onClick={() => {
+                  setEditingTrip(null)
+                  setFormData({
+                    tripCode: "",
+                    routeName: "",
+                    trainNumber: "",
+                    departureTime: "",
+                    arrivalTime: "",
+                    status: "scheduled",
+                    delayMinutes: "0",
+                  })
+                }}
+              >
+                <Plus className="mr-2 h-4 w-4" />
+                Thêm chuyến tàu
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="sm:max-w-[500px]">
+              <DialogHeader>
+                <DialogTitle>{editingTrip ? "Chỉnh sửa chuyến tàu" : "Thêm chuyến tàu mới"}</DialogTitle>
+                <DialogDescription>
+                  {editingTrip ? "Cập nhật thông tin chuyến tàu" : "Nhập thông tin chuyến tàu mới"}
+                </DialogDescription>
+              </DialogHeader>
+              <form onSubmit={handleSubmit}>
+                <div className="grid gap-4 py-4">
                   <div className="grid grid-cols-4 items-center gap-4">
-                    <Label htmlFor="delayMinutes" className="text-right">
-                      Trễ (phút)
+                    <Label htmlFor="tripCode" className="text-right">
+                      Mã chuyến
                     </Label>
                     <Input
-                      id="delayMinutes"
-                      type="number"
-                      min="0"
-                      value={formData.delayMinutes}
-                      onChange={(e) => setFormData({ ...formData, delayMinutes: e.target.value })}
+                      id="tripCode"
+                      value={formData.tripCode}
+                      onChange={(e) => setFormData({ ...formData, tripCode: e.target.value })}
                       className="col-span-3"
+                      required
                     />
                   </div>
-                )}
-              </div>
-              <DialogFooter>
-                <Button type="submit">{editingTrip ? "Cập nhật" : "Thêm mới"}</Button>
-              </DialogFooter>
-            </form>
-          </DialogContent>
-        </Dialog>
+                  <div className="grid grid-cols-4 items-center gap-4">
+                    <Label htmlFor="routeName" className="text-right">
+                      Tuyến đường
+                    </Label>
+                    <Select
+                      value={formData.routeName}
+                      onValueChange={(value) => setFormData({ ...formData, routeName: value })}
+                    >
+                      <SelectTrigger className="col-span-3">
+                        <SelectValue placeholder="Chọn tuyến đường" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {routes.map((route) => (
+                          <SelectItem key={route.routeId} value={route.routeName}>
+                            {route.routeName} ({route.originStationName} - {route.destinationStationName})
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="grid grid-cols-4 items-center gap-4">
+                    <Label htmlFor="trainNumber" className="text-right">
+                      Số tàu
+                    </Label>
+                    <Select
+                      value={formData.trainNumber}
+                      onValueChange={(value) => setFormData({ ...formData, trainNumber: value })}
+                    >
+                      <SelectTrigger className="col-span-3">
+                        <SelectValue placeholder="Chọn tàu" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {trains.map((train) => (
+                          <SelectItem key={train.id} value={train.trainNumber}>
+                            {train.trainNumber} - {train.trainName}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="grid grid-cols-4 items-center gap-4">
+                    <Label htmlFor="departureTime" className="text-right">
+                      Giờ khởi hành
+                    </Label>
+                    <Input
+                      id="departureTime"
+                      type="datetime-local"
+                      value={formData.departureTime}
+                      onChange={(e) => setFormData({ ...formData, departureTime: e.target.value })}
+                      className="col-span-3"
+                      required
+                    />
+                  </div>
+                  <div className="grid grid-cols-4 items-center gap-4">
+                    <Label htmlFor="arrivalTime" className="text-right">
+                      Giờ đến
+                    </Label>
+                    <Input
+                      id="arrivalTime"
+                      type="datetime-local"
+                      value={formData.arrivalTime}
+                      onChange={(e) => setFormData({ ...formData, arrivalTime: e.target.value })}
+                      className="col-span-3"
+                      required
+                    />
+                  </div>
+                  <div className="grid grid-cols-4 items-center gap-4">
+                    <Label htmlFor="status" className="text-right">
+                      Trạng thái
+                    </Label>
+                    <Select
+                      value={formData.status}
+                      onValueChange={(value) => setFormData({ ...formData, status: value })}
+                    >
+                      <SelectTrigger className="col-span-3">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {statusOptions.filter(s => s.value !== "all").map((status) => (
+                          <SelectItem key={status.value} value={status.value}>
+                            {status.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  {editingTrip && (
+                    <div className="grid grid-cols-4 items-center gap-4">
+                      <Label htmlFor="delayMinutes" className="text-right">
+                        Trễ (phút)
+                      </Label>
+                      <Input
+                        id="delayMinutes"
+                        type="number"
+                        min="0"
+                        value={formData.delayMinutes}
+                        onChange={(e) => setFormData({ ...formData, delayMinutes: e.target.value })}
+                        className="col-span-3"
+                      />
+                    </div>
+                  )}
+                </div>
+                <DialogFooter>
+                  <Button type="submit">{editingTrip ? "Cập nhật" : "Thêm mới"}</Button>
+                </DialogFooter>
+              </form>
+            </DialogContent>
+          </Dialog>
+          <Button asChild disabled={importing}>
+            <label style={{ cursor: importing ? "not-allowed" : "pointer" }}>
+              <input
+                type="file"
+                accept=".xlsx,.xls"
+                style={{ display: "none" }}
+                onChange={handleImportExcel}
+                ref={fileInputRef}
+                disabled={importing}
+              />
+              {importing ? "Đang import..." : "Import Excel"}
+            </label>
+          </Button>
+        </div>
       </div>
 
       <Card>

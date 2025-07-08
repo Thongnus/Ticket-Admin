@@ -155,3 +155,21 @@ export async function markTripCancelled(id: number, cancelReason?: string): Prom
   if (!res.ok) throw new Error("Failed to mark trip as cancelled");
   return res.text();
 }
+
+// Import trips from Excel file
+export async function importTripsFromExcel(file: File): Promise<any> {
+  const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8080/api";
+  const formData = new FormData();
+  formData.append("file", file);
+
+  const res = await fetch(`${API_BASE}/trips/import-excel`, {
+    method: "POST",
+    body: formData,
+    // Không cần Content-Type, browser sẽ tự set boundary cho multipart
+  });
+  if (!res.ok) {
+    const error = await res.json().catch(() => ({}));
+    throw new Error(error.failed || "Import thất bại");
+  }
+  return res.json();
+}

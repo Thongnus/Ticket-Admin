@@ -70,6 +70,10 @@ export default function BookingsManagement() {
   const [selectedBooking, setSelectedBooking] = useState<Booking | null>(null)
   const [isDetailDialogOpen, setIsDetailDialogOpen] = useState(false)
   const baseUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080/api"
+  const [currentPage, setCurrentPage] = useState(0)
+  const [totalPages, setTotalPages] = useState(1)
+  const [totalElements, setTotalElements] = useState(0)
+  const [pageSize, setPageSize] = useState(10)
 
   const paymentStatusOptions = [
     { value: "pending", label: "Chờ thanh toán", color: "bg-yellow-100 text-yellow-800" },
@@ -113,23 +117,24 @@ export default function BookingsManagement() {
     const fetchBookings = async () => {
       try {
         setLoading(true)
-        const params: any = {}
-        
+        const params: any = {
+          page: currentPage,
+          size: pageSize,
+        }
         if (statusFilter !== "all") {
           params.bookingStatus = statusFilter
         }
-        
         if (debouncedIdentityCardSearch.trim()) {
           params.identityCard = debouncedIdentityCardSearch.trim()
         }
-        
         const data = await getBookings(params)
         if (!Array.isArray(data.content)) {
           throw new Error("Trường 'content' không phải mảng")
         }
         setBookings(data.content || [])
+        setTotalPages(data.totalPages || 1)
+        setTotalElements(data.totalElements || 0)
       } catch (error) {
-        console.error("[Bookings] Lỗi:", error)
         setBookings([])
         toast({
           title: "Lỗi",
@@ -140,9 +145,23 @@ export default function BookingsManagement() {
         setLoading(false)
       }
     }
-
     fetchBookings()
-  }, [toast, statusFilter, debouncedIdentityCardSearch])
+  }, [toast, statusFilter, debouncedIdentityCardSearch, currentPage, pageSize])
+
+  // Reset về trang đầu khi filter/search thay đổi
+  useEffect(() => {
+    setCurrentPage(0)
+  }, [statusFilter, debouncedIdentityCardSearch])
+
+  // Hàm tạo dải số trang hiển thị (5 số quanh trang hiện tại)
+  function getPageNumbers(current: number, total: number, delta = 2) {
+    const range = [];
+    for (let i = Math.max(0, current - delta); i <= Math.min(total - 1, current + delta); i++) {
+      range.push(i);
+    }
+    return range;
+  }
+  const pageNumbers = getPageNumbers(currentPage, totalPages, 2);
 
   // Định dạng giá tiền
   const formatPrice = (price: number) => {
@@ -253,6 +272,16 @@ export default function BookingsManagement() {
                 ))}
               </SelectContent>
             </Select>
+            <Select value={pageSize.toString()} onValueChange={v => setPageSize(Number(v))}>
+              <SelectTrigger className="w-[110px]">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="10">10 / trang</SelectItem>
+                <SelectItem value="20">20 / trang</SelectItem>
+                <SelectItem value="50">50 / trang</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
         </CardHeader>
         <CardContent>
@@ -353,6 +382,38 @@ export default function BookingsManagement() {
                 ))}
               </TableBody>
             </Table>
+          )}
+          {totalPages > 1 && (
+            <div className="flex flex-wrap justify-between items-center mt-4 gap-2">
+              <div>
+                Trang <b>{currentPage + 1}</b> / <b>{totalPages}</b> ({totalElements} đơn đặt vé)
+              </div>
+              <div className="flex items-center gap-2">
+                <Button variant="outline" size="sm" disabled={currentPage === 0} onClick={() => setCurrentPage(0)}>
+                  Đầu
+                </Button>
+                <Button variant="outline" size="sm" disabled={currentPage === 0} onClick={() => setCurrentPage(currentPage - 1)}>
+                  Trước
+                </Button>
+                {pageNumbers.map((p) => (
+                  <Button
+                    key={p}
+                    variant={p === currentPage ? "default" : "outline"}
+                    size="sm"
+                    onClick={() => setCurrentPage(p)}
+                    disabled={p === currentPage}
+                  >
+                    {p + 1}
+                  </Button>
+                ))}
+                <Button variant="outline" size="sm" disabled={currentPage + 1 >= totalPages} onClick={() => setCurrentPage(currentPage + 1)}>
+                  Sau
+                </Button>
+                <Button variant="outline" size="sm" disabled={currentPage + 1 >= totalPages} onClick={() => setCurrentPage(totalPages - 1)}>
+                  Cuối
+                </Button>
+              </div>
+            </div>
           )}
         </CardContent>
       </Card>

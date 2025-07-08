@@ -284,6 +284,20 @@ export default function StationsManagement() {
     return <Badge className={statusOption?.color}>{statusOption?.label}</Badge>
   }
 
+  // Hàm tạo mảng số trang hiển thị (tối đa 3 số trang)
+  function getPageNumbers(current: number, total: number) {
+    if (total <= 3) {
+      return Array.from({ length: total }, (_, i) => i);
+    }
+    if (current <= 1) {
+      return [0, 1, 2];
+    }
+    if (current >= total - 2) {
+      return [total - 3, total - 2, total - 1];
+    }
+    return [current - 1, current, current + 1];
+  }
+
   const filteredStations = stations.filter((station) => {
     const matchesSearch =
       station.stationName.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -532,9 +546,17 @@ export default function StationsManagement() {
                   >
                     <ChevronLeft className="h-4 w-4" />
                   </Button>
-                  <div className="text-sm">
-                    Trang {currentPage + 1} / {totalPages}
-                  </div>
+                  {getPageNumbers(currentPage, totalPages).map((num) => (
+                    <Button
+                      key={num}
+                      variant={num === currentPage ? "default" : "outline"}
+                      size="sm"
+                      onClick={() => setCurrentPage(num)}
+                      className={num === currentPage ? "font-bold underline" : ""}
+                    >
+                      {num + 1}
+                    </Button>
+                  ))}
                   <Button
                     variant="outline"
                     size="sm"
